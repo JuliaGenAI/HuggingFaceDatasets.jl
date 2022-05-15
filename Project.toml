@@ -3,11 +3,25 @@ uuid = "d94b9a45-fdf5-4270-b024-5cbb9ef7117d"
 authors = ["Carlo Lucibello <carlo.lucibello@gmail.com> and contributors"]
 version = "0.1.0"
 
+[deps]
+MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+
 [compat]
+MLUtils = "0.2"
+PythonCall = "0.8"
 julia = "1.7"
 
 [extras]
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+ImageInTerminal = "d8c32880-2388-543b-8c61-d9f865259254"
+ImageShow = "4e3cecfd-b093-5904-9786-8bbb286a6a31"
+MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
+ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
+
+[extra]
+

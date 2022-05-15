@@ -1,6 +1,8 @@
-using HuggingFaceDatasets
 using Test
+using HuggingFaceDatasets, PythonCall, MLUtils
+using MLDatasets
+using ImageShow, ImageInTerminal
 
-@testset "HuggingFaceDatasets.jl" begin
-    # Write your tests here.
+@testset "dataset" begin
+    include("datasets.jl")
 end
