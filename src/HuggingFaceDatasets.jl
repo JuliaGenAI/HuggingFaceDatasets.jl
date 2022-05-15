@@ -1,21 +1,22 @@
 module HuggingFaceDatasets
 
-using Base: @kwdef
 using PythonCall
 using MLUtils: getobs, numobs
 import MLUtils
 
-export datasets, set_transform!, 
-      Dataset, load_dataset
+export datasets, load_dataset
 
 include("observation.jl")
+
 include("dataset.jl")
+export Dataset, set_transform!
 
 include("transforms.jl")
 export py2jl
 
 const datasets = PythonCall.pynew()
 
+# PYRACY. Remove when https://github.com/cjdoris/PythonCall.jl/issues/172 is closed.
 PythonCall.pyconvert(x) = pyconvert(Any, x)
 
 function load_dataset(args...; kws...)
