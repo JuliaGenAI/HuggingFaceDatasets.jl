@@ -21,6 +21,8 @@ pkg> add https://github.com/CarloLucibello/HuggingFaceDatasets.jl
 
 ## Usage Examples
 
+Check out the `examples/` folder for more usage examples.
+
 ### `load_dataset`
 
 ```julia
