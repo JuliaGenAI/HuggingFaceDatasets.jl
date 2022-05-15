@@ -16,20 +16,63 @@ This package is built on top of [PythonCall.jl](https://github.com/cjdoris/Pytho
 This package is under development and not registered yet.
 
 ```julia
-pkg> add 
+pkg> add https://github.com/CarloLucibello/HuggingFaceDatasets.jl
 ```
 
 ## Usage Examples
 
+### `load_dataset`
+
 ```julia
 julia> using HuggingFaceDatasets
 
-julia> dataset = load_dataset("mnist", split="train")
+julia> train_data = load_dataset("mnist", split="train")
+Reusing dataset mnist (/home/carlo/.cache/huggingface/datasets/mnist/mnist/1.0.0 fda16c03c4ecfb13f165ba7e29cf38129ce035011519968cdaf74894ce91c9d4)
+Dataset(<py Dataset({
+    features: ['image', 'label'],
+    num_rows: 60000
+})>, HuggingFaceDatasets.py2jl)
 
-julia> dataset[1]
+julia> train_data[1]
+Dict{String, Any} with 2 entries:
+  "label" => 5
+  "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
 ```
 
+### `set_transform!`
+
+```julia
+julia> using HuggingFaceDatasets, Flux
+
+
+julia> train_data = load_dataset("mnist", split="train");
+
+julia> function mnist_transform(x)
+            x = py2jl(x) # `py2jl` converts python types to julia types. This is the default transform.
+            image = Flux.batch(x["image"]) ./ 255f0
+            label = Flux.onehotbatch(x["label"], 0:9)
+            return (; image, label)
+        end
+
+julia> set_transform!(train_data, mnist_transform)
+
+julia> train_data[1:5].image |> summary
+"28×28×5 Array{Float32, 3}"
+
+julia> train_data[1:5].label
+10×5 OneHotMatrix(::Vector{UInt32}) with eltype Bool:
+ ⋅  1  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  1  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  1  ⋅  ⋅
+ 1  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  ⋅
+ ⋅  ⋅  ⋅  ⋅  1
+```
 
 ## Datasets list
 
-https://huggingface.co/datasets
+For a list of the available datasets, see https://huggingface.co/datasets.
