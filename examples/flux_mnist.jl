@@ -30,28 +30,22 @@ end
 function train(epochs)	
     batchsize = 128
     nhidden = 100
-
-    if CUDA.functional()
-        @info "Training on CUDA GPU"
-        CUDA.allowscalar(false)
-        device = gpu
-    else
-        @info "Training on CPU"
-        device = cpu
-    end
+    device = cpu
 
     dtrain = load_dataset("mnist", split="train")
     dtest = load_dataset("mnist", split="test")
     set_transform!(dtrain, mnist_transform)
     set_transform!(dtest, mnist_transform)
 
-    train_loader = Flux.DataLoader(dtrain; batchsize, shuffle=true)
-    test_loader = Flux.DataLoader(dtest; batchsize)
+    # We use [:] to materialize and transform the whole dataset.
+    # This gives much faster iterations.
+    train_loader = Flux.DataLoader(dtrain[:]; batchsize, shuffle=true) 
+    test_loader = Flux.DataLoader(dtest[:]; batchsize)
 
     model = Chain([Flux.flatten,
-                Dense(28*28, nhidden, relu),
-                Dense(nhidden, nhidden, relu),
-                Dense(nhidden, 10)]) |> device
+                   Dense(28*28, nhidden, relu),
+                   Dense(nhidden, nhidden, relu),
+                   Dense(nhidden, 10)]) |> device
 
 	ps = Flux.params(model)
 	opt = ADAM(1e-4)
@@ -59,7 +53,9 @@ function train(epochs)
     function report(epoch)
 		train_loss, train_acc = loss_and_accuracy(train_loader, model, device)
 		test_loss, test_acc = loss_and_accuracy(test_loader, model, device)
-		@info (; epoch, train_acc, test_acc)
+        r(x) = round(x, digits=3) 
+		r(x::Int) = x 
+        @info map(r, (; epoch, train_loss, train_acc, test_loss, test_acc))
     end
 
     report(0)
