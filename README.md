@@ -13,7 +13,8 @@ This package is built on top of [PythonCall.jl](https://github.com/cjdoris/Pytho
 
 ## Installation
 
-This package is under development and not registered yet.
+This package is currently under development and not registered yet. 
+You can install it using the Julia package manager with the command
 
 ```julia
 pkg> add https://github.com/CarloLucibello/HuggingFaceDatasets.jl
@@ -21,9 +22,12 @@ pkg> add https://github.com/CarloLucibello/HuggingFaceDatasets.jl
 
 ## Usage Examples
 
-Check out the `examples/` folder for more usage examples.
+HuggingFaceDatasets.jl provides a few wrappers around types from the `datasets` python package,
+along with a few related methods.
 
-### `load_dataset`
+Check out the `examples/` folder for usage examples.
+
+### `load_dataset` method
 
 ```julia
 julia> using HuggingFaceDatasets
@@ -41,11 +45,10 @@ Dict{String, Any} with 2 entries:
   "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
 ```
 
-### `set_transform!`
+### `set_transform!` method
 
 ```julia
 julia> using HuggingFaceDatasets, Flux
-
 
 julia> train_data = load_dataset("mnist", split="train");
 
