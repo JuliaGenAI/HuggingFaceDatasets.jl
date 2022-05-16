@@ -55,3 +55,12 @@
         @test d[1]["label"] == -7
     end
 end
+
+
+@testset "glue - ax" begin
+    d = load_dataset("glue", "ax", split="test")
+    @test length(d) == 1104
+    @test d[1]["label"] == -1
+
+    @test d["premise"] isa Vector{String}    
+end 

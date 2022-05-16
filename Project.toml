@@ -21,7 +21,7 @@ ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "Flux", "ImageInTerminal", "MLDatasets", "ProfileView", "ImageShow"]
 
 [extra]
 

@@ -32,6 +32,7 @@ function Base.getproperty(d::Dataset, s::Symbol)
     end
 end
 
+
 Base.length(d::Dataset) = length(d.pyd)
 
 Base.getindex(d::Dataset, ::Colon) = d[1:length(d)]
@@ -49,7 +50,7 @@ end
 
 function Base.getindex(d::Dataset, i::AbstractString)
     x = d.pyd[i]
-    return d.transform(pydict(Dict(i =>x)))
+    return d.transform(pydict(Dict(i =>x)))[i]
 end
 
 function set_transform!(d::Dataset, transform)
