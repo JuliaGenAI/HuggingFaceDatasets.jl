@@ -1,5 +1,5 @@
 
-@testset "mnist" begin
+@testset "MNIST" begin
     d = load_dataset("mnist", split="test")
     
     @testset "load_dataset" begin
@@ -57,7 +57,7 @@
 end
 
 
-@testset "glue - ax" begin
+@testset "GLUE - ax" begin
     d = load_dataset("glue", "ax", split="test")
     @test length(d) == 1104
     @test d[1]["label"] == -1

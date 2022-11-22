@@ -54,6 +54,10 @@ function Base.getindex(d::Dataset, i::AbstractString)
 end
 
 function set_transform!(d::Dataset, transform)
-    d.transform = transform
+    if transform === nothing
+        d.transform = identity
+    else
+        d.transform = transform
+    end
 end
 
