@@ -8,7 +8,7 @@ MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [compat]
-MLUtils = "0.2"
+MLUtils = "0.2, 0.3"
 PythonCall = "0.8, 0.9"
 julia = "1.7"
 
