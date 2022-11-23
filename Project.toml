@@ -9,6 +9,7 @@ MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [compat]
+CondaPkg = "0.2"
 Flux = "0.13"
 MLDatasets = "0.7"
 MLUtils = "0.2, 0.3"
