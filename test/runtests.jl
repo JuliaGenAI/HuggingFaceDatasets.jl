@@ -4,5 +4,9 @@ using HuggingFaceDatasets, PythonCall, MLUtils
 # using ImageShow, ImageInTerminal
 
 @testset "dataset" begin
-    include("datasets.jl")
+    include("dataset.jl")
+end
+
+@testset "datasetdict" begin
+    include("datasetdict.jl")
 end

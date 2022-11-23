@@ -1,18 +1,19 @@
 
 @testset "MNIST" begin
-    d = load_dataset("mnist", split="test")
+    dd = load_dataset("mnist")
     
     @testset "load_dataset" begin
-        @test d isa Dataset
-        @test length(d) == 10000
+        @test dd isa DatasetDict
+        @test length(dd) == 2
     end
 
     @testset "indexing with no transform" begin
-        tr = d.transform
-        set_transform!(d, identity)
+        tr = dd.transform
+        set_transform!(dd, identity)
         
-        @test_throws AssertionError d[0]
-        @test d[1] isa Py
+        @test_throws MethodError dd[1]
+        @test dd["test"] isa Dataset
+        d = dd["test"]
         @test pyisinstance(d[1], pytype(pydict()))
         @test d[1]["image"] isa Py
         @test d[1]["label"] isa Py
@@ -26,11 +27,12 @@
         @test d[1:2]["label"] isa Py
         @test pyisinstance(d[1:2]["label"], pytype(pylist()))
         
-        set_transform!(d, tr)
+        set_transform!(dd, tr)
     end
 
     @testset "indexing - py2jl" begin
-        @test d.transform === py2jl
+        @test dd.transform === py2jl
+        d = dd["test"]
         sample = d[1]
         @test sample isa Dict
         @test sample["label"] isa Int
@@ -51,16 +53,13 @@
         def pytr(x):
             return {"label": [-l for l in x["label"]]}
         """ => pytr
-        d.set_transform(pytr)
-        @test d[1]["label"] == -7
+        dd.set_transform(pytr)
+        @test dd["test"][1]["label"] == -7
+    end
+
+    @testset "getproperty returns julia types" begin
+        @test dd.num_rows isa Dict{String, Int}
+        @test dd.num_rows == Dict("test"  => 10000, "train" => 60000)
     end
 end
 
-
-@testset "GLUE - ax" begin
-    d = load_dataset("glue", "ax", split="test")
-    @test length(d) == 1104
-    @test d[1]["label"] == -1
-
-    @test d["premise"] isa Vector{String}    
-end 

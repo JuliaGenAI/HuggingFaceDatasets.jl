@@ -1,8 +1,7 @@
 """
-    Dataset(dataset, transform = py2jl)
+    Dataset(pydataset; transform = py2jl)
 
-A Julia wrapper around the python `datasets.Dataset` type.
-It is the return type of [`load_dataset`](@ref).
+A Julia wrapper around the objects of the python `datasets.Dataset` class.
 
 The `transform` is applied after datasets' one. 
 The [`py2jl`](@def) default converts python types to julia types.
@@ -11,13 +10,18 @@ Provides:
 - 1-based indexing.
 - [`set_transform!`](@ref) julia method.
 - All python class' methods from  `datasets.Dataset`.
+
+See also [`load_dataset`](@ref) and [`DatasetDict`](@ref).
 """
 mutable struct Dataset
     pyd::Py
     transform
-end
 
-Dataset(pydataset::Py; transform = py2jl) = Dataset(pydataset, transform)
+    function Dataset(pydataset::Py; transform = py2jl)
+        @assert pyisinstance(pydataset, datasets.Dataset)
+        return new(pydataset, transform)
+    end
+end
 
 function Base.getproperty(d::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
@@ -25,13 +29,12 @@ function Base.getproperty(d::Dataset, s::Symbol)
     else
         res = getproperty(getfield(d, :pyd), s)
         if pyisinstance(res, datasets.Dataset)
-            return Dataset(res, d.transform)
+            return Dataset(res; d.transform)
         else
-            return res
+            return res |> py2jl
         end
     end
 end
-
 
 Base.length(d::Dataset) = length(d.pyd)
 
