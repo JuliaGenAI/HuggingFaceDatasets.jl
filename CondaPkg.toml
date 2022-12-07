@@ -1,4 +1,4 @@
-channels = ["conda-forge", "huggingface"]
+channels = ["conda-forge"]
 
 [deps]
 pillow = ">=9.2, <10"

@@ -4,7 +4,7 @@
 A Julia wrapper around the objects of the python `datasets.Dataset` class.
 
 The `transform` is applied after datasets' one. 
-The [`py2jl`](@def) default converts python types to julia types.
+The [`py2jl`](@ref) default converts python types to julia types.
 
 Provides: 
 - 1-based indexing.

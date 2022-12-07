@@ -1,5 +1,12 @@
 """
-    DatasetDict
+    DatasetDict(pydatasetdict::Py; transform = py2jl)
+
+A `DatasetDict` is a dictionary of `Dataset`s. It is a wrapper around a `datasets.DatasetDict` object.
+
+The `transform` is applied to each [`Dataset`](@ref). 
+The [`py2jl`](@ref) default converts python types to julia types.
+
+See also [`load_dataset`](@ref) and [`Dataset`](@ref).
 """
 mutable struct DatasetDict
     pyd::Py
