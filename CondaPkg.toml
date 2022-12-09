@@ -4,4 +4,4 @@ channels = ["conda-forge"]
 pillow = ">=9.2, <10"
 numpy = ">=1.22, <2"
 datasets = ">=2.7, <3"
-pyarrow = "=6.0.0"
+pyarrow = "==6.0.0"
