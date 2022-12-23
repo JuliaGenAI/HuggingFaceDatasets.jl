@@ -2,7 +2,6 @@ using Flux, Zygote
 using Random, Statistics
 using Flux.Losses: logitcrossentropy
 using Flux: onecold
-using CUDA
 using HuggingFaceDatasets
 # using ProfileView, BenchmarkTools
 
@@ -30,25 +29,22 @@ end
 function train(epochs)	
     batchsize = 128
     nhidden = 100
-    device = cpu
+    device = gpu
 
-    dtrain = load_dataset("mnist", split="train")
-    dtest = load_dataset("mnist", split="test")
-    set_transform!(dtrain, mnist_transform)
-    set_transform!(dtest, mnist_transform)
+    dataset = load_dataset("mnist")
+    set_transform!(dataset, mnist_transform)
 
     # We use [:] to materialize and transform the whole dataset.
     # This gives much faster iterations.
-    train_loader = Flux.DataLoader(dtrain[:]; batchsize, shuffle=true) 
-    test_loader = Flux.DataLoader(dtest[:]; batchsize)
+    train_loader = Flux.DataLoader(dataset["train"][1:1000]; batchsize, shuffle=true) 
+    test_loader = Flux.DataLoader(dataset["test"][1:1000]; batchsize)
 
     model = Chain([Flux.flatten,
                    Dense(28*28, nhidden, relu),
                    Dense(nhidden, nhidden, relu),
                    Dense(nhidden, 10)]) |> device
 
-	ps = Flux.params(model)
-	opt = ADAM(1e-4)
+	opt = Flux.setup(AdamW(1e-3), model)
 
     function report(epoch)
 		train_loss, train_acc = loss_and_accuracy(train_loader, model, device)
@@ -62,8 +58,8 @@ function train(epochs)
 	for epoch in 1:epochs
 		for (x, y) in train_loader
 			x, y = x |> device, y |> device
-			loss, gs = withgradient(() -> logitcrossentropy(model(x), y), ps)
-			Flux.update!(opt, ps, gs)
+			loss, grads = withgradient(model -> logitcrossentropy(model(x), y), model)
+            Flux.update!(opt, model, grads[1])
 		end
         report(epoch)
 	end
