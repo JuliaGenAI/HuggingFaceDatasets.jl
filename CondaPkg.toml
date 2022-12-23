@@ -1,7 +1,7 @@
-channels = ["conda-forge", "huggingface"]
+channels = ["conda-forge"]
 
 [deps]
 datasets = ">=2.7, <3"
-numpy = ">=1.23, <2"
-pillow = ">=9.2, <10"
-python = ">=3.6, <4"
+numpy = ">=1.20, <2"
+pillow = ">=9.1, <10"
+pyarrow = "==6.0.0"

@@ -11,6 +11,9 @@ include("observation.jl")
 include("dataset.jl")
 export Dataset, set_transform!
 
+include("datasetdict.jl")
+export DatasetDict
+
 include("transforms.jl")
 export py2jl
 
@@ -25,6 +28,8 @@ function load_dataset(args...; kws...)
     d = datasets.load_dataset(args...; kws...)
     if pyisinstance(d, datasets.Dataset)
         return Dataset(d)
+    elseif pyisinstance(d, datasets.DatasetDict)
+        return DatasetDict(d)
     else
         return d
     end
