@@ -1,5 +1,4 @@
 [deps]
-DLPack = "53c2dc0f-f7d5-43fd-8906-6c0220547083"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 HuggingFaceDatasets = "d94b9a45-fdf5-4270-b024-5cbb9ef7117d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

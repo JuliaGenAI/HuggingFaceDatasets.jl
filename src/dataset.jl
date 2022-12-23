@@ -26,6 +26,8 @@ end
 function Base.getproperty(d::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
         return getfield(d, s)
+    elseif s == :with_format
+        return format -> with_format(d, format)
     else
         res = getproperty(getfield(d, :pyd), s)
         if pyisinstance(res, datasets.Dataset)
@@ -33,6 +35,14 @@ function Base.getproperty(d::Dataset, s::Symbol)
         else
             return res |> py2jl
         end
+    end
+end
+
+function with_format(d::Dataset, format)
+    if format == "julia"
+        return Dataset(d.pyd; transfrom = py2jl)
+    else
+        return Dataset(d.pyd.with_format(format); d.transform)
     end
 end
 
