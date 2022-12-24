@@ -4,10 +4,7 @@
 
 Load a dataset from the [HuggingFace Datasets](https://huggingface.co/datasets) library.
 
-By default, the python types in the returned [Dataset](@ref)s are converted to julia types using [`py2jl`](@ref).
-Pass `transform=identity` to disable this conversion.
-
-All other arguments are passed to the python function `datasets.load_dataset`.
+All arguments are passed to the python function `datasets.load_dataset`.
 See the documentation [here](https://huggingface.co/docs/datasets/package_reference/loading_methods.html#datasets.load_dataset).
 
 # Examples
@@ -49,13 +46,14 @@ Dict{String, Any} with 2 entries:
   "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
 ```
 """
-function load_dataset(args...;  transform = py2jl, kws...)
+function load_dataset(args...; kws...)
     d = datasets.load_dataset(args...; kws...)
     if pyisinstance(d, datasets.Dataset)
-        return Dataset(d; transform)
+        return Dataset(d)
     elseif pyisinstance(d, datasets.DatasetDict)
-        return DatasetDict(d; transform)
+        return DatasetDict(d)
     else
         return d
     end
 end
+

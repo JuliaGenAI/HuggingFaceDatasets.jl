@@ -3,7 +3,7 @@ module HuggingFaceDatasets
 using PythonCall
 using MLUtils: getobs, numobs
 import MLUtils
-
+using DLPack
 
 const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()
@@ -14,7 +14,8 @@ export datasets
 include("observation.jl")
 
 include("dataset.jl")
-export Dataset, set_transform!
+export Dataset, set_transform!, 
+    with_format, set_format!
 
 include("datasetdict.jl")
 export DatasetDict
@@ -24,11 +25,6 @@ export py2jl
 
 include("load_dataset.jl")
 export load_dataset
-
-
-# PYRACY. Remove when https://github.com/cjdoris/PythonCall.jl/issues/172 is closed.
-PythonCall.pyconvert(x) = pyconvert(Any, x)
-
 
 function __init__()
     # Since it is illegal in PythonCall to import a python module in a module, we need to do this here.
