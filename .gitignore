@@ -5,4 +5,4 @@ Manifest.toml
 /docs/build/
 .CondaPkg
 .vscode
-
+.ipynb_checkpoints

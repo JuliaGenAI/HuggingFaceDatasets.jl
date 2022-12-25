@@ -8,20 +8,29 @@ using DLPack
 const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()
 const np = PythonCall.pynew()
+const copy = PythonCall.pynew()
 
 export datasets
 
 include("observation.jl")
 
+include("callable.jl")
+
 include("dataset.jl")
-export Dataset, set_transform!, 
-    with_format, set_format!
+export Dataset, 
+    with_jltransform,
+    set_jltransform!, 
+    with_format, 
+    set_format!,
+    reset_format!
 
 include("datasetdict.jl")
 export DatasetDict
 
 include("transforms.jl")
-export py2jl
+export py2jl, 
+    jl2numpy, 
+    numpy2jl
 
 include("load_dataset.jl")
 export load_dataset
@@ -32,6 +41,7 @@ function __init__()
     PythonCall.pycopy!(datasets, pyimport("datasets"))
     PythonCall.pycopy!(PIL, pyimport("PIL"))
     PythonCall.pycopy!(np, pyimport("numpy"))
+    PythonCall.pycopy!(copy, pyimport("copy"))
 end
 
 end # module

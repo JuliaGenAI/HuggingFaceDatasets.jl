@@ -1,42 +1,67 @@
 """
-    Dataset(pydataset; transform = identity)
+    Dataset
 
-A Julia wrapper around the objects of the python `datasets.Dataset` class.
-
-The `transform` is applied after the python dataset one
-that can be set with `ds.set_transform(pytransform)`.
-
-The [`py2jl`](@ref) transform provided by this package 
-converts python types to julia types.
+A Julia wrapper around an object of the python `datasets.Dataset` class.
 
 Provides: 
 - 1-based indexing.
-- [`set_transform!`](@ref) julia method.
 - All python class' methods from  `datasets.Dataset`.
 
 See also [`load_dataset`](@ref) and [`DatasetDict`](@ref).
 """
 mutable struct Dataset
-    pyd::Py
-    transform
+    pyds::Py
+    jltransform
 
-    function Dataset(pydataset::Py; transform = identity)
-        @assert pyisinstance(pydataset, datasets.Dataset)
-        return new(pydataset, transform)
+    function Dataset(pyds::Py, jltransform = identity)
+        @assert pyisinstance(pyds, datasets.Dataset)
+        return new(pyds, jltransform)
     end
 end
 
-function Base.getproperty(d::Dataset, s::Symbol)
+## TODO make it work with arbitrary order tensors
+# function Dataset(d::Dict; jltransform = identity)
+#     pyds = datasets.Dataset.from_dict(d)
+#     return Dataset(pyds, jltransform)
+# end
+
+function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
-        return getfield(d, s)
+        return getfield(ds, s)
     else
-        res = getproperty(getfield(d, :pyd), s)
-        if pyisinstance(res, datasets.Dataset)
-            return Dataset(res; d.transform)
+        res = getproperty(getfield(ds, :pyds), s)
+        if pycallable(res)
+            return CallableWrapper(res)
         else
             return res |> py2jl
         end
     end
+end
+
+Base.length(ds::Dataset) = length(ds.pyds)
+
+Base.getindex(ds::Dataset, ::Colon) = ds[1:length(ds)]
+
+function Base.getindex(ds::Dataset, i::AbstractVector{<:Integer})
+    @assert all(>(0), i)
+    x = ds.pyds[i .- 1]
+    return ds.jltransform(x)
+end
+
+function Base.getindex(ds::Dataset, i::Integer)
+    x = ds[[i]] # transforms and jltransforms always work on batches
+    return getobs(x, 1)
+end
+
+function Base.getindex(ds::Dataset, i::AbstractString)
+    x = ds.pyds[i]
+    d = @py {i: x}
+    return ds.jltransform(d)[i]
+end
+
+function Base.deepcopy(ds::Dataset)
+    pyds = copy.deepcopy(ds.pyds)
+    return Dataset(pyds, ds.jltransform)
 end
 
 """
@@ -65,13 +90,9 @@ Dict{String, Any} with 2 entries:
   "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
 ```
 """
-function with_format(d::Dataset, format::AbstractString)
-    if format == "julia"
-        pyd = d.pyd.with_format("numpy")
-        return Dataset(pyd; transform = py2jl)
-    else
-        return Dataset(d.pyd.with_format(format); d.transform)
-    end
+function with_format(ds::Dataset, format::AbstractString)
+    ds = deepcopy(ds)
+    return set_format!(ds, format)
 end
 
 """
@@ -80,41 +101,35 @@ end
 Set the format of `ds` to `format`. Mutating
 version of [`with_format`](@ref).
 """
-function set_format!(d::Dataset, format)
+function set_format!(ds::Dataset, format)
     if format == "julia"
-        pyd = d.pyd.set_format("numpy")
-        return Dataset(pyd; transform = py2jl)
+        ds.pyds.set_format("numpy")
+        ds.jltransform = py2jl
     else
-        return Dataset(d.pyd.set_format(format); d.transform)
+        ds.pyds.set_format(format)
+        ds.jltransform = identity
     end
+    return ds
 end
 
-Base.length(d::Dataset) = length(d.pyd)
+set_format!(ds::Dataset) = reset_format!(ds)
 
-Base.getindex(d::Dataset, ::Colon) = d[1:length(d)]
-
-function Base.getindex(d::Dataset, i::AbstractVector{<:Integer})
-    @assert all(>(0), i)
-    x = d.pyd[i .- 1]
-    return d.transform(x)
+function reset_format!(ds::Dataset)
+    ds.pyds.set_format(nothing)
+    ds.jltransform = identity
+    return ds
 end
 
-function Base.getindex(d::Dataset, i::Integer)
-    x = d[[i]] # transforms always work on batches
-    return getobs(x, 1) 
+function with_jltransform(ds::Dataset, transform)
+    ds = deepcopy(ds)
+    return set_jltransform!(ds, transform)
 end
 
-function Base.getindex(d::Dataset, i::AbstractString)
-    x = d.pyd[i]
-    return d.transform(pydict(Dict(i =>x)))[i]
-end
-
-
-function set_transform!(d::Dataset, transform)
+function set_jltransform!(ds::Dataset, transform)
     if transform === nothing
-        d.transform = identity
+        ds.jltransform = identity
     else
-        d.transform = transform
+        ds.jltransform = transform
     end
+    return ds
 end
-

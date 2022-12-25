@@ -17,10 +17,10 @@ function loss_and_accuracy(data_loader, model, device)
     ls = 0.0f0
     num = 0
     for (x, y) in data_loader
-        x, y = device(x), device(y)
-        ŷ = model(x)
+        x, y = x |> device, y |> device
+		ŷ = model(x)
         ls += logitcrossentropy(ŷ, y, agg=sum)
-        acc += sum(onecold(ŷ) .== onecold(y)) ## Decode the output of the model
+        acc += sum(onecold(ŷ) .== onecold(y))
         num +=  size(x)[end]
     end
     return ls / num, acc / num
