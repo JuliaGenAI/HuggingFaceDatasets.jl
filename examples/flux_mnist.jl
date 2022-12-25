@@ -33,7 +33,7 @@ function train(epochs)
 
     dataset = load_dataset("mnist")
     set_format!(dataset, "julia")
-    set_transform!(dataset, mnist_transform)
+    set_jltransform!(dataset, mnist_transform)
 
     # We use [:] to materialize and transform the whole dataset.
     # This gives much faster iterations.

@@ -12,9 +12,9 @@ See also [`load_dataset`](@ref) and [`Dataset`](@ref).
 """
 mutable struct DatasetDict
     pyd::Py
-    transform
+    jltransform
 
-    function DatasetDict(pydatasetdict::Py; transform = identity)
+    function DatasetDict(pydatasetdict::Py, transform = identity)
         @assert pyisinstance(pydatasetdict, datasets.DatasetDict)
         return new(pydatasetdict, transform)
     end
@@ -25,10 +25,8 @@ function Base.getproperty(d::DatasetDict, s::Symbol)
         return getfield(d, s)
     else
         res = getproperty(getfield(d, :pyd), s)
-        if pyisinstance(res, datasets.Dataset)
-            return Dataset(res; d.transform)
-        elseif pyisinstance(res, datasets.DatasetDict)
-            return DatasetDict(res; d.transform)
+        if pycallable(res)
+            return CallableWrapper(res)
         else
             return res |> py2jl
         end
@@ -39,27 +37,29 @@ Base.length(d::DatasetDict) = length(d.pyd)
 
 function Base.getindex(d::DatasetDict, i::AbstractString)
     x = d.pyd[i]
-    return Dataset(x; d.transform)
+    return Dataset(x, d.jltransform)
 end
 
-function set_transform!(d::DatasetDict, transform)
+function with_jltransform(d::DatasetDict, transform)
+    d = deepcopy(d)
+    set_jltransform!(d, transform)
+    return d
+end
+
+function set_jltransform!(d::DatasetDict, transform)
     if transform === nothing
         d.transform = identity
     else
         d.transform = transform
     end
+    return d
 end
 
 function with_format(d::DatasetDict, format)
-    if format == "julia"
-        pyd = d.pyd.with_format("numpy")
-        return DatasetDict(pyd; transform = py2jl)
-    else 
-        pyd = d.pyd.with_format(format)
-        return DatasetDict(pyd; d.transform)
-    end
+    d = deepcopy(d)
+    return set_format!(d, format)
 end
-    
+
 """
     set_format!(d::DatasetDict, format)
 
@@ -71,9 +71,10 @@ will be used when possible.
 function set_format!(d::DatasetDict, format)
     if format == "julia"
         d.pyd.set_format("numpy")
-        d.transform = py2jl
+        d.jltransform = py2jl
     else
         d.pyd.set_format(format)
+        d.jltransform = identity
     end
     return d
 end
