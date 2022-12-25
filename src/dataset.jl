@@ -65,7 +65,7 @@ Dict{String, Any} with 2 entries:
   "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
 ```
 """
-function with_format(d::Dataset, format)
+function with_format(d::Dataset, format::AbstractString)
     if format == "julia"
         pyd = d.pyd.with_format("numpy")
         return Dataset(pyd; transform = py2jl)

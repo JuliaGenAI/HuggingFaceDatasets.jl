@@ -7,7 +7,7 @@ using HuggingFaceDatasets
 
 function mnist_transform(x)
     x = py2jl(x)
-    image = Flux.batch(x["image"]) ./ 255f0
+    image = x["image"] ./ 255f0
     label = Flux.onehotbatch(x["label"], 0:9)
     return (; image, label)
 end
@@ -26,18 +26,19 @@ function loss_and_accuracy(data_loader, model, device)
     return ls / num, acc / num
 end
 
-function train(epochs)	
+function train(epochs)
     batchsize = 128
     nhidden = 100
     device = gpu
 
     dataset = load_dataset("mnist")
+    set_format!(dataset, "julia")
     set_transform!(dataset, mnist_transform)
 
     # We use [:] to materialize and transform the whole dataset.
     # This gives much faster iterations.
-    train_loader = Flux.DataLoader(dataset["train"][1:1000]; batchsize, shuffle=true) 
-    test_loader = Flux.DataLoader(dataset["test"][1:1000]; batchsize)
+    train_loader = Flux.DataLoader(dataset["train"]; batchsize, shuffle=true) 
+    test_loader = Flux.DataLoader(dataset["test"]; batchsize)
 
     model = Chain([Flux.flatten,
                    Dense(28*28, nhidden, relu),

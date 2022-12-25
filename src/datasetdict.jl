@@ -1,10 +1,12 @@
 """
-    DatasetDict(pydatasetdict::Py; transform = py2jl)
+    DatasetDict(pydatasetdict::Py; transform = identity)
 
-A `DatasetDict` is a dictionary of `Dataset`s. It is a wrapper around a `datasets.DatasetDict` object.
+A `DatasetDict` is a dictionary of `Dataset`s. 
+It is a wrapper around a `datasets.DatasetDict` object.
 
 The `transform` is applied to each [`Dataset`](@ref). 
-The [`py2jl`](@ref) default converts python types to julia types.
+The [`py2jl`](@ref) transform provided by this package
+converts python types to julia types.
 
 See also [`load_dataset`](@ref) and [`Dataset`](@ref).
 """
@@ -12,7 +14,7 @@ mutable struct DatasetDict
     pyd::Py
     transform
 
-    function DatasetDict(pydatasetdict::Py; transform = py2jl)
+    function DatasetDict(pydatasetdict::Py; transform = identity)
         @assert pyisinstance(pydatasetdict, datasets.DatasetDict)
         return new(pydatasetdict, transform)
     end
@@ -48,3 +50,30 @@ function set_transform!(d::DatasetDict, transform)
     end
 end
 
+function with_format(d::DatasetDict, format)
+    if format == "julia"
+        pyd = d.pyd.with_format("numpy")
+        return DatasetDict(pyd; transform = py2jl)
+    else 
+        pyd = d.pyd.with_format(format)
+        return DatasetDict(pyd; d.transform)
+    end
+end
+    
+"""
+    set_format!(d::DatasetDict, format)
+
+Set the format of `d` to `format`.
+If format is `"julia"`, the returned dataset will be transformed
+with [`py2jl`](@ref) and copyless conversion from python types
+will be used when possible.
+"""
+function set_format!(d::DatasetDict, format)
+    if format == "julia"
+        d.pyd.set_format("numpy")
+        d.transform = py2jl
+    else
+        d.pyd.set_format(format)
+    end
+    return d
+end
