@@ -4,7 +4,6 @@ authors = ["Carlo Lucibello <carlo.lucibello@gmail.com> and contributors"]
 version = "0.2.0"
 
 [deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 DLPack = "53c2dc0f-f7d5-43fd-8906-6c0220547083"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
@@ -20,12 +19,7 @@ PythonCall = "0.8, 0.9"
 julia = "1.7"
 
 [extras]
-Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
-ImageInTerminal = "d8c32880-2388-543b-8c61-d9f865259254"
-ImageShow = "4e3cecfd-b093-5904-9786-8bbb286a6a31"
-MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
-ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Flux", "ImageInTerminal", "MLDatasets", "ProfileView", "ImageShow"]
+test = ["Test"]
