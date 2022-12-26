@@ -120,11 +120,38 @@ function reset_format!(ds::Dataset)
     return ds
 end
 
+"""
+    with_jltransform(ds::Dataset, transform)
+    with_jltransform(transform, ds::Dataset)
+
+Return a copy of `ds` with the julia transform set to `transform`.
+The `transform` applies when indexing, e.g. `ds[1]` or `ds[1:2]`.
+
+The transform is always applied to a batch of data, even if the index is a single integer.
+That is, `ds[1]` is equivalent to `ds[1:1]` from the point of view of the transform.
+
+The julia transform is applied after the python transform (if any). 
+The python transform can be set with `ds.set_transform(pytransform)`.
+
+If `transform` is `nothing` or `identity`, the returned dataset will not be transformed.
+
+See also [`set_jltransform!`](@ref) for the mutating version.
+"""
 function with_jltransform(ds::Dataset, transform)
     ds = deepcopy(ds)
     return set_jltransform!(ds, transform)
 end
 
+# conveniency for the do syntax
+with_jltransform(transform, ds::Dataset) = with_jltransform(ds, transform)
+
+"""
+    set_jltransform!(ds::Dataset, transform)
+    set_jltransform!(transform, ds::Dataset)
+
+Set the julia transform of `ds` to `transform`. Mutating
+version of [`with_jltransform`](@ref).
+"""
 function set_jltransform!(ds::Dataset, transform)
     if transform === nothing
         ds.jltransform = identity
@@ -133,3 +160,5 @@ function set_jltransform!(ds::Dataset, transform)
     end
     return ds
 end
+
+set_jltransform!(transform, ds::Dataset) = set_jltransform!(ds, transform)

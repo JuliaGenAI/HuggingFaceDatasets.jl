@@ -129,3 +129,13 @@ end
     set_format!(ds, nothing)
     @test ds.format["type"] === nothing
 end
+
+@testset "jltransform always acts on batches" begin
+    ds = with_jltransform(mnist) do x
+        x = py2jl(x)
+        @test x["image"] isa Vector # batch
+        return x 
+    end
+    ds[1]
+    ds[1:2]
+end
