@@ -20,7 +20,8 @@ end
 
 @testset "indexing, no (jl)transform by default" begin
     @test_throws AssertionError mnist[0]
-    
+    @test length(mnist[:]["label"]) == 1000
+
     x = mnist[1]
     @test @py isinstance(x, dict)
     @py isinstance(x["image"], PIL.PngImagePlugin.PngImageFile)
@@ -47,6 +48,8 @@ end
 @testset "with_format(julia) - mnist" begin
     ds = with_format(mnist, "julia")
     @test ds.format["type"] === "numpy"
+    @test ds["label"] isa Vector{Int}
+    @test lebgth(ds["label"]) == 10000
 
     x = ds[1]
     @test x isa Dict
