@@ -14,9 +14,9 @@ mutable struct DatasetDict
     pyd::Py
     jltransform
 
-    function DatasetDict(pydatasetdict::Py, transform = identity)
+    function DatasetDict(pydatasetdict::Py, jltransform = identity)
         @assert pyisinstance(pydatasetdict, datasets.DatasetDict)
-        return new(pydatasetdict, transform)
+        return new(pydatasetdict, jltransform)
     end
 end
 
