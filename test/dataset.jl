@@ -49,7 +49,7 @@ end
     ds = with_format(mnist, "julia")
     @test ds.format["type"] === "numpy"
     @test ds["label"] isa Vector{Int}
-    @test lebgth(ds["label"]) == 10000
+    @test length(ds["label"]) == 10000
 
     x = ds[1]
     @test x isa Dict
