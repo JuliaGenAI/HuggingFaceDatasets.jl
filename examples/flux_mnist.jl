@@ -37,8 +37,9 @@ function train(epochs)
 
     # We use [:] to materialize and transform the whole dataset.
     # This gives much faster iterations.
-    train_loader = Flux.DataLoader(dataset["train"]; batchsize, shuffle=true) 
-    test_loader = Flux.DataLoader(dataset["test"]; batchsize)
+    # Omit the [:] if you don't want to load the whole dataset in-memory.
+    train_loader = Flux.DataLoader(dataset["train"][:]; batchsize, shuffle=true) 
+    test_loader = Flux.DataLoader(dataset["test"][:]; batchsize)
 
     model = Chain([Flux.flatten,
                    Dense(28*28, nhidden, relu),
@@ -66,4 +67,5 @@ function train(epochs)
 	end
 end
 
-@time train(2)# 20s on a m1 pro
+@time train(2)  # 8s on a m1 pro with in-memory loading
+                # 20s on-the-fly loading
