@@ -20,7 +20,7 @@ end
 
 @testset "indexing, no (jl)transform by default" begin
     @test_throws AssertionError mnist[0]
-    @test length(mnist[:]["label"]) == 1000
+    @test length(mnist[:]["label"]) == 10000
 
     x = mnist[1]
     @test @py isinstance(x, dict)
