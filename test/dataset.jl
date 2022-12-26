@@ -120,3 +120,12 @@ end
     @test ds.format["type"] === nothing
     @test @py isinstance(ds[1], dict)
 end
+
+@testset "set_format" begin
+    ds = deepcopy(mnist)
+    ds.set_format("numpy")
+    @test ds.format["type"] == "numpy"
+    @test mnist.format["type"] === nothing
+    set_format!(ds, nothing)
+    @test ds.format["type"] === nothing
+end

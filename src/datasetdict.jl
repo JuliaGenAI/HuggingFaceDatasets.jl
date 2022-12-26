@@ -40,6 +40,11 @@ function Base.getindex(d::DatasetDict, i::AbstractString)
     return Dataset(x, d.jltransform)
 end
 
+function Base.deepcopy(d::DatasetDict)
+    pyd = copy.deepcopy(d.pyd)
+    return DatasetDict(pyd, d.jltransform)
+end
+
 function with_jltransform(d::DatasetDict, transform)
     d = deepcopy(d)
     set_jltransform!(d, transform)

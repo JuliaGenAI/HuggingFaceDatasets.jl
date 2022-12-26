@@ -42,3 +42,12 @@ end
     @test mnist.num_rows isa Dict{String, Int}
     @test mnist.num_rows == Dict("test"  => 10000, "train" => 60000)
 end
+
+@testset "set_format" begin
+    d = deepcopy(mnist)
+    d.set_format("numpy")
+    @test d["test"].format["type"] == "numpy"
+    @test mnist["test"].format["type"] === nothing
+    set_format!(d, nothing)
+    @test d["test"].format["type"] === nothing
+end
