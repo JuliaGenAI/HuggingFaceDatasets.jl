@@ -67,9 +67,9 @@ version of [`with_jltransform`](@ref).
 """
 function set_jltransform!(d::DatasetDict, transform)
     if transform === nothing
-        d.transform = identity
+        d.jltransform = identity
     else
-        d.transform = transform
+        d.jltransform = transform
     end
     return d
 end

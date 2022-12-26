@@ -66,4 +66,4 @@ function train(epochs)
 	end
 end
 
-@time train(2)
+@time train(2)# 20s on a m1 pro

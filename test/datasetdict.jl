@@ -51,3 +51,14 @@ end
     set_format!(d, nothing)
     @test d["test"].format["type"] === nothing
 end
+
+@testset "set_jltransform!" begin
+    d = deepcopy(mnist)
+    set_jltransform!(d) do x
+        x = py2jl(x)
+        x["label"] .= 1
+        return x
+    end
+
+    @test d["test"][1:2]["label"] == [1, 1]
+end
