@@ -5,78 +5,45 @@
 [![Build Status](https://github.com/CarloLucibello/HuggingFaceDatasets.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/CarloLucibello/HuggingFaceDatasets.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/CarloLucibello/HuggingFaceDatasets.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/CarloLucibello/HuggingFaceDatasets.jl) 
 
-A julia wrapper around the Hugging Face `datasets` python package, exposing a large collection
-of machine learning datasets. 
+HuggingFaceDatasets.jl is a non-official julia wrapper around the python package  `datasets` from Hugging Face. `datasets` contains a large collection of machine learning datasets (see [here](https://huggingface.co/datasets) for a list) that this package makes available to the julia ecosystem.
 
 This package is built on top of [PythonCall.jl](https://github.com/cjdoris/PythonCall.jl).
 
 ## Installation
 
-This package is currently under development and not registered yet. 
-You can install it using the Julia package manager with the command
+HuggingFaceDatasets.jl is a registered Julia package. You can easily install it through the package manager:
 
 ```julia
-pkg> add https://github.com/CarloLucibello/HuggingFaceDatasets.jl
+pkg> add HuggingFaceDatasets
 ```
 
-## Usage Examples
+## Usage
 
-HuggingFaceDatasets.jl provides a few wrappers around types from the `datasets` python package,
-along with a few related methods.
+HuggingFaceDatasets.jl provides wrappers around types from the `datasets` python package (e.g. `Dataset` and `DatasetDict`) along with a few related methods.
 
 Check out the `examples/` folder for usage examples.
 
-### `load_dataset` method
-
 ```julia
-julia> using HuggingFaceDatasets
+julia> train_data = load_dataset("mnist", split = "train")
+Dataset(<py Dataset({
+    features: ['image', 'label'],
+    num_rows: 60000
+})>, identity)
 
-julia> train_data = load_dataset("mnist", split="train")
-Reusing dataset mnist (/home/carlo/.cache/huggingface/datasets/mnist/mnist/1.0.0 fda16c03c4ecfb13f165ba7e29cf38129ce035011519968cdaf74894ce91c9d4)
+# Indexing starts with 1. 
+# By defaul, python types are returned.
+julia> train_data[1]
+Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B64E2E90>, 'label': 5}
+
+julia> set_format!(train_data, "julia")
 Dataset(<py Dataset({
     features: ['image', 'label'],
     num_rows: 60000
 })>, HuggingFaceDatasets.py2jl)
 
+# Now we have julia types
 julia> train_data[1]
 Dict{String, Any} with 2 entries:
   "label" => 5
   "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
 ```
-
-### `set_transform!` method
-
-```julia
-julia> using HuggingFaceDatasets, Flux
-
-julia> train_data = load_dataset("mnist", split="train");
-
-julia> function mnist_transform(x)
-            x = py2jl(x) # `py2jl` converts python types to julia types. This is the default transform.
-            image = Flux.batch(x["image"]) ./ 255f0
-            label = Flux.onehotbatch(x["label"], 0:9)
-            return (; image, label)
-        end
-
-julia> set_transform!(train_data, mnist_transform)
-
-julia> train_data[1:5].image |> summary
-"28×28×5 Array{Float32, 3}"
-
-julia> train_data[1:5].label
-10×5 OneHotMatrix(::Vector{UInt32}) with eltype Bool:
- ⋅  1  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  1  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  1  ⋅  ⋅
- 1  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  ⋅
- ⋅  ⋅  ⋅  ⋅  1
-```
-
-## Datasets list
-
-For a list of the available datasets, see https://huggingface.co/datasets.

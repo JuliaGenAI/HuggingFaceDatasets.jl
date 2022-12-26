@@ -1,7 +1,8 @@
 using Test
-using HuggingFaceDatasets, PythonCall, MLUtils
-# using MLDatasets
-# using ImageShow, ImageInTerminal
+using HuggingFaceDatasets, PythonCall
+
+PIL = HuggingFaceDatasets.PIL
+np = HuggingFaceDatasets.np
 
 @testset "dataset" begin
     include("dataset.jl")
