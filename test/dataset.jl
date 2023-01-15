@@ -79,8 +79,9 @@ end
     @test x["hypothesis"] == "The cat did not sit on the mat."
 
     # https://github.com/cjdoris/PythonCall.jl/issues/254
-    @test_broken length(x["premise"])
-    @test_broken x["sentence"][1] == ["h"]
+    @test length(x["premise"]) == 23
+    @test x["premise"][1] == 'T'
+    @test x["premise"][1:2] == "Th"
 
     x = ds[1:2]
     @test x isa Dict
