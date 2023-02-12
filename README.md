@@ -38,7 +38,7 @@ Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 
 julia> length(train_data)
 60000
 
-# Now we set the jula format
+# Now we set the julia format
 julia> train_data = load_dataset("mnist", split = "train").with_format("julia");
 
 # Returned observations are julia objects
