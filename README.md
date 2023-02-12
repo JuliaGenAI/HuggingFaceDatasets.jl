@@ -21,7 +21,7 @@ pkg> add HuggingFaceDatasets
 
 HuggingFaceDatasets.jl provides wrappers around types from the `datasets` python package (e.g. `Dataset` and `DatasetDict`) along with a few related methods.
 
-Check out the `examples/` folder for usage examples.
+Check out the [examples/](https://github.com/CarloLucibello/HuggingFaceDatasets.jl/tree/main/examples) folder for usage examples.
 
 ```julia
 julia> train_data = load_dataset("mnist", split = "train")
