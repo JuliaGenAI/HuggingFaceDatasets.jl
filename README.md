@@ -35,7 +35,6 @@ Dataset({
 julia> train_data[1]
 Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B64E2E90>, 'label': 5}
 
-
 julia> length(train_data)
 60000
 
