@@ -28,6 +28,8 @@ end
 function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
         return getfield(ds, s)
+    elseif s === :with_format
+        return format -> with_format(ds, format)
     else
         res = getproperty(getfield(ds, :pyds), s)
         if pycallable(res)
@@ -103,7 +105,7 @@ version of [`with_format`](@ref).
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        ds.pyds.set_format("numpy")
+        # ds.pyds.set_format("numpy")
         ds.jltransform = py2jl
     else
         ds.pyds.set_format(format)
