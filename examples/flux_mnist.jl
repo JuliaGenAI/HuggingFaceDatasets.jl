@@ -14,12 +14,6 @@ function mnist_transform(batch)
     return (; image, label)
 end
 
-# Remove when https://github.com/JuliaML/MLUtils.jl/pull/147 is merged and tagged
-Base.getindex(data::MLUtils.MappedData, idx::Int) = getobs(data.f(getobs(data.data, [idx])), 1)
-Base.getindex(data::MLUtils.MappedData, idxs::AbstractVector) = data.f(getobs(data.data, idxs))
-Base.getindex(data::MLUtils.MappedData, ::Colon) = data[1:length(data.data)]
-
-
 function loss_and_accuracy(data_loader, model, device)
     acc = 0
     ls = 0.0f0
