@@ -5,9 +5,15 @@ function _pyconvert(x::Py)
         return Dataset(x)
     elseif pyisinstance(x, datasets.DatasetDict)
         return DatasetDict(x)
-    elseif pyisinstance(x, PIL.PngImagePlugin.PngImageFile)
-        # TODO: attempt to convert to a Julia image type. 
-        return numpy2jl(np.array(x))
+    elseif pyisinstance(x, PIL.PngImagePlugin.PngImageFile) || pyisinstance(x, PIL.JpegImagePlugin.JpegImageFile)
+        a = numpy2jl(np.array(x))
+        if ndims(a) == 3 && size(a, 1) == 3
+            return colorview(RGB{N0f8}, a)
+        elseif ndims(a) == 2
+            return reinterpret(Gray{N0f8}, a)
+        else
+            error("Unknown image format")
+        end
     elseif pyisinstance(x, np.ndarray)
         return numpy2jl(x)
     else

@@ -4,6 +4,7 @@ using PythonCall
 using MLUtils: getobs, numobs
 import MLUtils
 using DLPack
+using ImageCore
 
 const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()

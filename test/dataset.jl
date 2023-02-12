@@ -47,40 +47,41 @@ end
 
 @testset "with_format(julia) - mnist" begin
     ds = with_format(mnist, "julia")
-    @test ds.format["type"] === "numpy"
+    @test ds.format["type"] === nothing
     @test ds["label"] isa Vector{Int}
     @test length(ds["label"]) == 10000
 
     x = ds[1]
     @test x isa Dict
     @test x["label"] == 7
-    @test x["image"] isa Matrix{UInt8}
+    @test x["image"] isa AbstractMatrix{Gray{N0f8}}
     @test size(x["image"]) == (28, 28)
 
     x = ds[1:2]
     @test x isa Dict
     @test x["label"] isa Vector{Int}
     @test x["label"] == [7, 2]
-    @test x["image"] isa Array{UInt8,3}
-    @test size(x["image"]) == (28, 28, 2)
+    @test x["image"] isa Vector
+    @test length(x["image"]) == 2
+    @test size(x["image"][1]) == (28, 28)
 end
 
 @testset "with_format(julia) - glue_ax" begin
     ds = with_format(glue_ax, "julia")
-    @test ds.format["type"] === "numpy"
+    @test ds.format["type"] === nothing
 
     x = ds[1]
     @test x isa Dict
     @test x["label"] == -1
     @test x["idx"] == 0
+    @show x["premise"] |> typeof
     @test x["premise"] isa AbstractString
     @test x["premise"] == "The cat sat on the mat."
     @test x["hypothesis"] isa AbstractString
     @test x["hypothesis"] == "The cat did not sit on the mat."
 
-    # https://github.com/cjdoris/PythonCall.jl/issues/254
-    @test_broken length(x["premise"])
-    @test_broken x["sentence"][1] == ["h"]
+    @test length(x["premise"]) == 23
+    @test x["premise"][1] == 'T'
 
     x = ds[1:2]
     @test x isa Dict
@@ -88,10 +89,8 @@ end
     @test x["label"] == [-1, -1]
     @test x["idx"] == [0, 1]
     @test x["premise"] isa AbstractVector{<:AbstractString}
-    @test x["premise"] isa PyArray{<:AbstractString, 1}
     @test all(x["premise"] .== ["The cat sat on the mat.", "The cat did not sit on the mat."])
     @test x["hypothesis"] isa AbstractVector{<:AbstractString}
-    @test x["hypothesis"] isa PyArray{<:AbstractString, 1}
     @test all(x["hypothesis"] .== ["The cat did not sit on the mat.", "The cat sat on the mat."])
 end
 
@@ -118,7 +117,7 @@ end
 
 @testset "reset_format!" begin
     ds = with_format(mnist, "julia")
-    @test ds.format["type"] == "numpy"
+    @test ds.format["type"] === nothing
     reset_format!(ds)
     @test ds.format["type"] === nothing
     @test @py isinstance(ds[1], dict)

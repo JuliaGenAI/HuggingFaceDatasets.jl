@@ -1,17 +1,24 @@
 
 """
-    load_dataset(args...; transform=py2jl, kws...)
+    load_dataset(args...; kws...)
 
 Load a dataset from the [HuggingFace Datasets](https://huggingface.co/datasets) library.
 
 All arguments are passed to the python function `datasets.load_dataset`.
 See the documentation [here](https://huggingface.co/docs/datasets/package_reference/loading_methods.html#datasets.load_dataset).
 
+Returns a [`DatasetDict`](@ref) or a [`Dataset`](@ref) depending on the `split` argument.
+
+Use the `dataset.with_format("julia")` method to lazily convert the observation from the dataset 
+to julia types.
+
 # Examples
+
+Without a `split` argument, a `DatasetDict` is returned:
 
 ```julia
 julia> d = load_dataset("glue", "sst2")
-DatasetDict(<py DatasetDict({
+DatasetDict({
     train: Dataset({
         features: ['sentence', 'label', 'idx'],
         num_rows: 67349
@@ -24,26 +31,29 @@ DatasetDict(<py DatasetDict({
         features: ['sentence', 'label', 'idx'],
         num_rows: 1821
     })
-})>, HuggingFaceDatasets.py2jl)
+})
 
 julia> d["train"]
-Dataset(<py Dataset({
+Dataset({
     features: ['sentence', 'label', 'idx'],
     num_rows: 67349
-})>, HuggingFaceDatasets.py2jl)
+})
+```
 
-mnist = load_dataset("mnist", split="train")
+Selecting a split returns a `Dataset` instead. We also
+apply the `"julia"` format.
 
-julia> mnist = load_dataset("mnist", split="train")
-Dataset(<py Dataset({
+```julia
+julia> mnist = load_dataset("mnist", split="train").with_format("julia")
+Dataset({
     features: ['image', 'label'],
     num_rows: 60000
-})>, HuggingFaceDatasets.py2jl)
+})
 
 julia> mnist[1]
 Dict{String, Any} with 2 entries:
   "label" => 5
-  "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
+  "image" => Gray{N0f8}[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f…
 ```
 """
 function load_dataset(args...; kws...)

@@ -28,6 +28,8 @@ end
 function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
         return getfield(ds, s)
+    elseif s === :with_format
+        return format -> with_format(ds, format)
     else
         res = getproperty(getfield(ds, :pyds), s)
         if pycallable(res)
@@ -44,7 +46,7 @@ Base.getindex(ds::Dataset, ::Colon) = ds[1:length(ds)]
 
 function Base.getindex(ds::Dataset, i::AbstractVector{<:Integer})
     @assert all(>(0), i)
-    x = ds.pyds[i .- 1]
+    x = getfield(ds, :pyds)[i .- 1]
     return ds.jltransform(x)
 end
 
@@ -63,6 +65,8 @@ function Base.deepcopy(ds::Dataset)
     pyds = copy.deepcopy(ds.pyds)
     return Dataset(pyds, ds.jltransform)
 end
+
+Base.show(io::IO, ds::Dataset) = print(io, ds.pyds)
 
 """
     with_format(ds::Dataset, format)
@@ -103,7 +107,7 @@ version of [`with_format`](@ref).
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        ds.pyds.set_format("numpy")
+        # ds.pyds.set_format("numpy")
         ds.jltransform = py2jl
     else
         ds.pyds.set_format(format)
