@@ -1,5 +1,5 @@
 using Test
-using HuggingFaceDatasets, PythonCall
+using HuggingFaceDatasets, PythonCall, ImageCore
 
 PIL = HuggingFaceDatasets.PIL
 np = HuggingFaceDatasets.np
