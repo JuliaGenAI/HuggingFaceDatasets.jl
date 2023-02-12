@@ -35,6 +35,9 @@ function bench()
     end
 end
 
+# hf is slow at reading image datasets.
+# Pytorch vision is much faset (see the notebook in perf/) 
+
 bench()
 # # MLDatasets
 # 19.515 ms (120005 allocations: 34.64 MiB)

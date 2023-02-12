@@ -34,7 +34,6 @@ function loss_and_accuracy(data_loader, model, device)
     return ls / num, acc / num
 end
 
-
 function train(epochs)
     batchsize = 128
     nhidden = 100
@@ -66,9 +65,9 @@ function train(epochs)
     report(0)
 	@time for epoch in 1:epochs
 		for (x, y) in train_loader
-			# x, y = x |> device, y |> device
-			# loss, grads = withgradient(model -> logitcrossentropy(model(x), y), model)
-            # Flux.update!(opt, model, grads[1])
+			x, y = x |> device, y |> device
+			loss, grads = withgradient(model -> logitcrossentropy(model(x), y), model)
+            Flux.update!(opt, model, grads[1])
 		end
         report(epoch)
 	end

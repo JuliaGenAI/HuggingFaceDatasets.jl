@@ -1,4 +1,4 @@
-using HuggingFaceDatasets, ImageShow
+using HuggingFaceDatasets, ImageShow, Test, ImageCore
 
 @testset "image classification" begin 
     @testset "cifar10" begin
