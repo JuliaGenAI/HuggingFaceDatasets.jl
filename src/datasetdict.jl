@@ -46,6 +46,9 @@ function Base.deepcopy(d::DatasetDict)
     pyd = copy.deepcopy(d.pyd)
     return DatasetDict(pyd, d.jltransform)
 end
+
+Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
+
 """"
     with_jltransform(d::DatasetDict, transform)
     with_jltransform(transform, d::DatasetDict)

@@ -46,7 +46,7 @@ Base.getindex(ds::Dataset, ::Colon) = ds[1:length(ds)]
 
 function Base.getindex(ds::Dataset, i::AbstractVector{<:Integer})
     @assert all(>(0), i)
-    x = ds.pyds[i .- 1]
+    x = getfield(ds, :pyds)[i .- 1]
     return ds.jltransform(x)
 end
 
@@ -65,6 +65,8 @@ function Base.deepcopy(ds::Dataset)
     pyds = copy.deepcopy(ds.pyds)
     return Dataset(pyds, ds.jltransform)
 end
+
+Base.show(io::IO, ds::Dataset) = print(io, ds.pyds)
 
 """
     with_format(ds::Dataset, format)

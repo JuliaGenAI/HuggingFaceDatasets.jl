@@ -25,25 +25,31 @@ Check out the `examples/` folder for usage examples.
 
 ```julia
 julia> train_data = load_dataset("mnist", split = "train")
-Dataset(<py Dataset({
+Dataset({
     features: ['image', 'label'],
     num_rows: 60000
-})>, identity)
+})
 
 # Indexing starts with 1. 
-# By defaul, python types are returned.
+# Python types are returned by default.
 julia> train_data[1]
 Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B64E2E90>, 'label': 5}
 
-julia> set_format!(train_data, "julia")
-Dataset(<py Dataset({
-    features: ['image', 'label'],
-    num_rows: 60000
-})>, HuggingFaceDatasets.py2jl)
 
-# Now we have julia types
+julia> length(train_data)
+60000
+
+# Now we set the jula format
+julia> train_data = load_dataset("mnist", split = "train").with_format("julia");
+
+# Returned observations are julia objects
 julia> train_data[1]
 Dict{String, Any} with 2 entries:
   "label" => 5
-  "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
+  "image" => ColorTypes.Gray{FixedPointNumbers.N0f8}[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); Gray{N…
+
+julia> train_data[1:2]
+Dict{String, Vector} with 2 entries:
+  "label" => [5, 0]
+  "image" => Base.ReinterpretArray{Gray{N0f8}, 2, UInt8, Matrix{UInt8}, false}[[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gra…
 ```

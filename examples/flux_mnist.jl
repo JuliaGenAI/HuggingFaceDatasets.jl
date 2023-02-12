@@ -7,18 +7,18 @@ using MLUtils
 using ImageCore
 # using ProfileView, BenchmarkTools
 
-whc(x::AbstractMatrix) = ImageCore.channelview(x)
-
 function mnist_transform(batch)
-    image = batch["image"]
-    image = whc.(image) # from [colored HW] to [WHC]
-    image = Flux.batch(image) ./ 255f0  
+    image = ImageCore.channelview.(batch["image"]) # from Matrix{Gray{N0f8}} to Matrix{UInt8}
+    image = Flux.batch(image) ./ 255f0
     label = Flux.onehotbatch(batch["label"], 0:9)
     return (; image, label)
 end
 
-# Remove when https://github.com/JuliaML/MLUtils.jl/pull/147 is merged
+# Remove when https://github.com/JuliaML/MLUtils.jl/pull/147 is merged and tagged
+Base.getindex(data::MLUtils.MappedData, idx::Int) = getobs(data.f(getobs(data.data, [idx])), 1)
 Base.getindex(data::MLUtils.MappedData, idxs::AbstractVector) = data.f(getobs(data.data, idxs))
+Base.getindex(data::MLUtils.MappedData, ::Colon) = data[1:length(data.data)]
+
 
 function loss_and_accuracy(data_loader, model, device)
     acc = 0
@@ -34,24 +34,20 @@ function loss_and_accuracy(data_loader, model, device)
     return ls / num, acc / num
 end
 
+
 function train(epochs)
     batchsize = 128
     nhidden = 100
-    device = gpu
+    device = cpu
 
     train_data = load_dataset("mnist", split="train").with_format("julia")
     test_data = load_dataset("mnist", split="test").with_format("julia")
-    train_data = mapobs(mnist_transform, train_data)
-    test_data = mapobs(mnist_transform, test_data)
+    train_data = mapobs(mnist_transform, train_data)[:] # lazy apply transform then materialize
+    test_data = mapobs(mnist_transform, test_data)[:]
     
-    # set_jltransform!(dataset, mnist_transform)
-
-    # We use [:] to materialize and transform the whole dataset.
-    # This gives much faster iterations.
-    # Omit the [:] if you don't want to load the whole dataset in-memory.
-    train_loader = Flux.DataLoader(dataset["train"]; batchsize, shuffle=true) 
-    test_loader = Flux.DataLoader(dataset["test"]; batchsize)
-
+    train_loader = Flux.DataLoader(train_data; batchsize, shuffle=true) 
+    test_loader = Flux.DataLoader(test_data; batchsize)
+    
     model = Chain([Flux.flatten,
                    Dense(28*28, nhidden, relu),
                    Dense(nhidden, nhidden, relu),
@@ -68,11 +64,11 @@ function train(epochs)
     end
 
     report(0)
-	for epoch in 1:epochs
+	@time for epoch in 1:epochs
 		for (x, y) in train_loader
-			x, y = x |> device, y |> device
-			loss, grads = withgradient(model -> logitcrossentropy(model(x), y), model)
-            Flux.update!(opt, model, grads[1])
+			# x, y = x |> device, y |> device
+			# loss, grads = withgradient(model -> logitcrossentropy(model(x), y), model)
+            # Flux.update!(opt, model, grads[1])
 		end
         report(epoch)
 	end
