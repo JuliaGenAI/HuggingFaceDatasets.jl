@@ -74,7 +74,6 @@ end
     @test x isa Dict
     @test x["label"] == -1
     @test x["idx"] == 0
-    @show x["premise"] |> typeof
     @test x["premise"] isa AbstractString
     @test x["premise"] == "The cat sat on the mat."
     @test x["hypothesis"] isa AbstractString

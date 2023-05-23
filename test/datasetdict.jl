@@ -19,12 +19,12 @@ end
 @testset "with_format(julia)" begin
     d = with_format(mnist, "julia")
     ds = d["test"]
-    @test ds.format["type"] == "numpy"
+    @test ds.format["type"] == nothing
     x = ds[1]
     @test x isa Dict
     @test x["label"] isa Int
     @test x["label"] == 7
-    @test x["image"] isa Matrix{UInt8}
+    @test x["image"] isa AbstractMatrix{<:Gray}
     @test size(x["image"]) == (28, 28)
 end
 

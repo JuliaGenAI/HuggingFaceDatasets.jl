@@ -107,7 +107,7 @@ version of [`with_format`](@ref).
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        # ds.pyds.set_format("numpy")
+        ds.pyds.reset_format() # or d.pyd.set_format("python")
         ds.jltransform = py2jl
     else
         ds.pyds.set_format(format)

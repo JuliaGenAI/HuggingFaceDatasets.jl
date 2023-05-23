@@ -21,6 +21,7 @@ function _pyconvert(x::Py)
     end
 end
 
+# Do nothing on a non-Py object.
 _pyconvert(x) = x
 
 """
@@ -30,6 +31,7 @@ Convert Python types to Julia types applying `pyconvert` recursively.
 """
 py2jl
 
+# py2jl recurses through pycanonicalize and converts through _pyconvert
 py2jl(x) = pycanonicalize(_pyconvert(x))
 
 pycanonicalize(x) = x
