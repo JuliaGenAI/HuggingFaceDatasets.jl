@@ -32,7 +32,7 @@ Dataset({
 # Indexing starts with 1. 
 # Python types are returned by default.
 julia> train_data[1]
-Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B64E2E90>, 'label': 5}
+Python: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x7F04DE661CD0>, 'label': 5}
 
 julia> length(train_data)
 60000
@@ -40,14 +40,14 @@ julia> length(train_data)
 # Now we set the julia format
 julia> train_data = load_dataset("mnist", split = "train").with_format("julia");
 
-# Returned observations are julia objects
+# Returned observations are now julia objects
 julia> train_data[1]
 Dict{String, Any} with 2 entries:
   "label" => 5
-  "image" => ColorTypes.Gray{FixedPointNumbers.N0f8}[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); Gray{N…
+  "image" => Gray{N0f8}[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); … ; Gray{N0f8}(0.0) Gray{N0f8}(0.0) ……
 
 julia> train_data[1:2]
 Dict{String, Vector} with 2 entries:
   "label" => [5, 0]
-  "image" => Base.ReinterpretArray{Gray{N0f8}, 2, UInt8, Matrix{UInt8}, false}[[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gra…
+  "image" => ReinterpretArray{Gray{N0f8}, 2, UInt8, Matrix{UInt8}, false}[[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gra…
 ```
