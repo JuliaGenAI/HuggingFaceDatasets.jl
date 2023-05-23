@@ -41,6 +41,8 @@ function __init__()
     # https://cjdoris.github.io/PythonCall.jl/dev/pythoncall-reference/#PythonCall.pycopy!
     PythonCall.pycopy!(datasets, pyimport("datasets"))
     PythonCall.pycopy!(PIL, pyimport("PIL"))
+    pyimport("PIL.PngImagePlugin")
+    pyimport("PIL.JpegImagePlugin")
     PythonCall.pycopy!(np, pyimport("numpy"))
     PythonCall.pycopy!(copy, pyimport("copy"))
 end
