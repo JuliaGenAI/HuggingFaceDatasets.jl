@@ -102,7 +102,7 @@ version of [`with_format`](@ref).
 """
 function set_format!(d::DatasetDict, format)
     if format == "julia"
-        d.pyd.set_format("numpy")
+        d.pyd.reset_format()
         d.jltransform = py2jl
     else
         d.pyd.set_format(format)
