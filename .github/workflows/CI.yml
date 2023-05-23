@@ -18,8 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.7'
-          - '1'
+          - '1.9'
+          # - '1' # add back when 1.10 is out
           - 'nightly'
         os:
           - ubuntu-latest
