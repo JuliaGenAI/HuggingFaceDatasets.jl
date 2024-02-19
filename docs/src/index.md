@@ -4,7 +4,7 @@ CurrentModule = HuggingFaceDatasets
 
 # HuggingFaceDatasets
 
-Documentation for [HuggingFaceDatasets](https://github.com/CarloLucibello/HuggingFaceDatasets.jl).
+Documentation for [HuggingFaceDatasets](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl).
 
 
 HuggingFaceDatasets.jl is a non-official julia wrapper around the python package  `datasets` from Hugging Face. `datasets` contains a large collection of machine learning datasets (see [here](https://huggingface.co/datasets) for a list) that this package makes available to the julia ecosystem.

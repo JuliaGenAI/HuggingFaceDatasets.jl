@@ -19,10 +19,12 @@ jobs:
       matrix:
         version:
           - '1.9'
-          # - '1' # add back when 1.10 is out
+          - '1' # add back when 1.10 is out
           - 'nightly'
         os:
           - ubuntu-latest
+          - windows-latest
+          - macOS-latest
         arch:
           - x64
     steps:

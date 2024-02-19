@@ -6,11 +6,11 @@ DocMeta.setdocmeta!(HuggingFaceDatasets, :DocTestSetup, :(using HuggingFaceDatas
 makedocs(;
     modules=[HuggingFaceDatasets],
     authors="Carlo Lucibello <carlo.lucibello@gmail.com> and contributors",
-    repo="https://github.com/CarloLucibello/HuggingFaceDatasets.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/{commit}{path}#{line}",
     sitename="HuggingFaceDatasets.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://CarloLucibello.github.io/HuggingFaceDatasets.jl",
+        canonical="https://JuliaGenAI.github.io/HuggingFaceDatasets.jl",
         assets=String[],
     ),
     pages=[
@@ -19,6 +19,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/CarloLucibello/HuggingFaceDatasets.jl",
+    repo="github.com/JuliaGenAI/HuggingFaceDatasets.jl",
     devbranch="main",
 )
