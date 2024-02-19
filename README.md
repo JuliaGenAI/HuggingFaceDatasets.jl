@@ -1,8 +1,8 @@
 # HuggingFaceDatasets
 
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://CarloLucibello.github.io/HuggingFaceDatasets.jl/dev)
-[![Build Status](https://github.com/CarloLucibello/HuggingFaceDatasets.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/CarloLucibello/HuggingFaceDatasets.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/CarloLucibello/HuggingFaceDatasets.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/CarloLucibello/HuggingFaceDatasets.jl) 
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaGenAI.github.io/HuggingFaceDatasets.jl/dev)
+[![Build Status](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/JuliaGenAI/HuggingFaceDatasets.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/JuliaGenAI/HuggingFaceDatasets.jl) 
 
 HuggingFaceDatasets.jl is a non-official julia wrapper around the python package  `datasets` from Hugging Face. `datasets` contains a large collection of machine learning datasets (see [here](https://huggingface.co/datasets) for a list) that this package makes available to the julia ecosystem.
 
@@ -20,7 +20,7 @@ pkg> add HuggingFaceDatasets
 
 HuggingFaceDatasets.jl provides wrappers around types from the `datasets` python package (e.g. `Dataset` and `DatasetDict`) along with a few related methods.
 
-Check out the [examples/](https://github.com/CarloLucibello/HuggingFaceDatasets.jl/tree/main/examples) folder for usage examples.
+Check out the [examples/](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/examples) folder for usage examples.
 
 ```julia
 julia> train_data = load_dataset("mnist", split = "train")
