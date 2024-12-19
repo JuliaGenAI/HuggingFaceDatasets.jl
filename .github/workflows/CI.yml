@@ -19,7 +19,7 @@ jobs:
       matrix:
         version:
           - '1.9'
-          - '1' # add back when 1.10 is out
+          - '1'
           - 'nightly'
         os:
           - ubuntu-latest
