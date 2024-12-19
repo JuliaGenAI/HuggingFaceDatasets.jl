@@ -37,7 +37,6 @@ include("load_dataset.jl")
 export load_dataset
 
 function __init__()
-    ENV["JULIA_CONDAPKG_OPENSSL_VERSION"] = "ignore"
     # Since it is illegal in PythonCall to import a python module in a module, we need to do this here.
     # https://juliapy.github.io/PythonCall.jl/dev/pythoncall-reference/#PythonCall.Core.pycopy!
     PythonCall.pycopy!(datasets, pyimport("datasets"))

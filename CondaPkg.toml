@@ -1,5 +1,7 @@
+channels = ["conda-forge"]
+
 [deps]
-datasets = ">=3.0, <4"
-numpy = ">=2.0, <3"
+datasets = ">=2.0, <4"
+numpy = ""
 pillow = ""
 
