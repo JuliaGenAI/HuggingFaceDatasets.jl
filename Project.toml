@@ -1,7 +1,7 @@
 name = "HuggingFaceDatasets"
 uuid = "d94b9a45-fdf5-4270-b024-5cbb9ef7117d"
 authors = ["Carlo Lucibello"]
-version = "0.3.2"
+version = "0.3.3"
 
 [deps]
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
