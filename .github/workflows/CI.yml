@@ -53,10 +53,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-          JULIA_CONDAPKG_OPENSSL_VERSION: "ignore"
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
             using HuggingFaceDatasets
             DocMeta.setdocmeta!(HuggingFaceDatasets, :DocTestSetup, :(using HuggingFaceDatasets); recursive=true)
             doctest(HuggingFaceDatasets)'
+        env:
+          JULIA_CONDAPKG_OPENSSL_VERSION: "ignore"
+

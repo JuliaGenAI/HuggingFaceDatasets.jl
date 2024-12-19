@@ -1,8 +1,3 @@
 [deps]
-CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
-DLPack = "53c2dc0f-f7d5-43fd-8906-6c0220547083"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 HuggingFaceDatasets = "d94b9a45-fdf5-4270-b024-5cbb9ef7117d"
-ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
-MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
-PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
