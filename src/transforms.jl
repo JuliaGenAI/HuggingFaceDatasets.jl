@@ -1,10 +1,32 @@
 
-# See https://github.com/cjdoris/PythonCall.jl/issues/172.
-function _pyconvert(x::Py)
+"""
+    py2jl(x)
+
+Convert Python types to Julia types. It will recursively traverse built-in python
+containers such as lists, tuples, dicts, and sets, and convert all nested objects.
+On the leaves, it will call either `pyconvert(Any, x)` or [`numpy2jl`](@ref).
+"""
+py2jl(x) = pyconvert(Any, x)
+
+function py2jl(x::Py)
+    # handle datasets
     if pyisinstance(x, datasets.Dataset)
         return Dataset(x)
     elseif pyisinstance(x, datasets.DatasetDict)
         return DatasetDict(x)
+    # handle list, tuple, dict, and set
+    elseif pyisinstance(x, pytype(pylist()))
+        return [py2jl(x) for x in x]
+    elseif pyisinstance(x, pytype(pytuple()))
+        return tuple(py2jl(x) for x in x)
+    elseif pyisinstance(x, pytype(pydict()))
+        return Dict(py2jl(k) => py2jl(v) for (k, v) in x.items())
+    elseif pyisinstance(x, pytype(pyset()))
+        return Set(py2jl(x) for x in x)
+    # handle numpy arrays   
+    elseif pyisinstance(x, np.ndarray)
+        return numpy2jl(x)
+    # handle PIL images
     elseif pyisinstance(x, PIL.PngImagePlugin.PngImageFile) || pyisinstance(x, PIL.JpegImagePlugin.JpegImageFile)
         a = numpy2jl(np.array(x))
         if ndims(a) == 3 && size(a, 1) == 3
@@ -14,49 +36,36 @@ function _pyconvert(x::Py)
         else
             error("Unknown image format")
         end
-    elseif pyisinstance(x, np.ndarray)
-        return numpy2jl(x)
+    # handle other types
     else
         return pyconvert(Any, x)
     end
 end
 
-# Do nothing on a non-Py object.
-_pyconvert(x) = x
-
-"""
-    py2jl(x)
-
-Convert Python types to Julia types applying `pyconvert` recursively.
-"""
-py2jl
-
-# py2jl recurses through pycanonicalize and converts through _pyconvert
-py2jl(x) = pycanonicalize(_pyconvert(x))
-
-pycanonicalize(x) = x
-
-pycanonicalize(x::PyList) = [py2jl(x) for x in x]
-pycanonicalize(x::PyDict) = Dict(py2jl(k) => py2jl(v) for (k, v) in pairs(x))
 
 """
     numpy2jl(x)
 
-Convert a numpy array to a Julia array using DLPack.
+Convert a numpy array to a Julia array using DLPack.jl.
 The conversion is copyless, and mutations to the Julia array are reflected in the numpy array.
+For row major python arrays, the returned Julia array has permuted dimensions.
+
+This function is called by [`py2jl`](@ref).
+See also [`jl2numpy`](@ref).
 """
 function numpy2jl(x::Py)
-    # pyconvert(Any, x)
-    # PyArray(x, copy=false)
-    if Bool(x.dtype.type == np.str_)
-        return PyArray(x, copy=false)
-    else
-        return DLPack.wrap(x, x -> x.__dlpack__())
-    end
+    return DLPack.from_dlpack(x)
 end
 
-## TODO this doesn't work yet.
-## https://github.com/pabloferz/DLPack.jl/issues/32
-# function jl2numpy(x::AbstractArray)
-#     return DLPack.share(x, np.from_dlpack)
-# end
+"""
+    jl2numpy(x)
+
+Convert a Julia array to a numpy array using DLPack.jl.
+The conversion is copyless, and mutations to the numpy array are reflected in the Julia array.
+The returned numpy array has permuted dimensions with respect to the input Julia array.
+
+See also [`numpy2jl`](@ref).
+"""
+function jl2numpy(x::AbstractArray)
+    return DLPack.share(x, np.from_dlpack)
+end

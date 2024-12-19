@@ -1,10 +1,5 @@
-channels = ["conda-forge"]
-
 [deps]
-# h5py = ""
-# pillow = ">=9.1, <10"
-# pyarrow = "==6.0.0"
-datasets = ">=2.12, <3"
-numpy = ">=1.20, <2"
+datasets = ">=3.0, <4"
+numpy = ">=2.0, <3"
 pillow = ""
 

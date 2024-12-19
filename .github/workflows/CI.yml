@@ -19,7 +19,7 @@ jobs:
       matrix:
         version:
           - '1.9'
-          - '1' # add back when 1.10 is out
+          - '1'
           - 'nightly'
         os:
           - ubuntu-latest
@@ -44,18 +44,19 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v4.2.1
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
-      - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-docdeploy@v1
+      - run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+      - run: julia --color=yes --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-      - run: |
-          julia --project=docs -e '
-            using Documenter: DocMeta, doctest
-            using HuggingFaceDatasets
-            DocMeta.setdocmeta!(HuggingFaceDatasets, :DocTestSetup, :(using HuggingFaceDatasets); recursive=true)
-            doctest(HuggingFaceDatasets)'
+          JULIA_CONDAPKG_OPENSSL_VERSION: "ignore"
+
+
