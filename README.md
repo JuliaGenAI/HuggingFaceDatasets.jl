@@ -39,9 +39,7 @@ julia> length(train_data)
 
 julia> train_data = load_dataset("mnist", split = "train").with_format("julia");
 
-       # Returned observations are now julia objects
-
-julia> train_data[1]
+julia> train_data[1] # Returned observations are now julia objects
 Dict{String, Any} with 2 entries:
   "label" => 5
   "image" => Gray{N0f8}[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0]

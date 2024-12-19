@@ -1,12 +1,9 @@
-# API
-
-## Index
-
-```@index
-Pages   = ["api.md"]
+```@meta
+CurrentModule = HuggingFaceDatasets
+CollapsedDocStrings = true
 ```
 
-## Docs
+# API
 
 ```@autodocs
 Modules = [HuggingFaceDatasets]

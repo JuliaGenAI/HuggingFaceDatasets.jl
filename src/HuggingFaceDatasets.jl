@@ -3,7 +3,7 @@ module HuggingFaceDatasets
 using PythonCall
 using MLUtils: getobs, numobs
 import MLUtils
-using DLPack
+using DLPack: DLPack
 using ImageCore
 
 const datasets = PythonCall.pynew()

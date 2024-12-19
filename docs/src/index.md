@@ -26,26 +26,30 @@ HuggingFaceDatasets.jl provides wrappers around types from the `datasets` python
 Check out the `examples/` folder for usage examples.
 
 ```julia
+# Returned observations are now julia objects
+julia> using HuggingFaceDatasets
+
 julia> train_data = load_dataset("mnist", split = "train")
-Dataset(<py Dataset({
+Dataset({
     features: ['image', 'label'],
     num_rows: 60000
-})>, identity)
+})
 
-# Indexing starts with 1. 
-# By defaul, python types are returned.
 julia> train_data[1]
-Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B64E2E90>, 'label': 5}
+Python: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x3340B0290>, 'label': 5}
 
-julia> set_format!(train_data, "julia")
-Dataset(<py Dataset({
-    features: ['image', 'label'],
-    num_rows: 60000
-})>, HuggingFaceDatasets.py2jl)
+julia> length(train_data)
+60000
 
-# Now we have julia types
-julia> train_data[1]
+julia> train_data = load_dataset("mnist", split = "train").with_format("julia");
+
+julia> train_data[1] # Returned observations are now julia objects
 Dict{String, Any} with 2 entries:
   "label" => 5
-  "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
+  "image" => Gray{N0f8}[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0]
+
+julia> train_data[1:2]
+Dict{String, Vector} with 2 entries:
+  "label" => [5, 0]
+  "image" => ReinterpretArray{Gray{N0f8}, 2, UInt8, Matrix{UInt8}, false}[[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0…
 ```
