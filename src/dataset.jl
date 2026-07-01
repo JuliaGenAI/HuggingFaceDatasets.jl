@@ -15,7 +15,7 @@ See also [`load_dataset`](@ref), [`DatasetDict`](@ref), and [`with_format`](@ref
 # Examples
 
 ```jldoctest
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])))
+julia> ds = Dataset((; label=[5, 0, 4]))
 Dataset({
     features: ['label'],
     num_rows: 3
@@ -175,7 +175,7 @@ See also [`filter`](@ref).
 # Examples
 
 ```julia
-julia> ds = with_format(Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4]))), "julia");
+julia> ds = with_format(Dataset((; label=[5, 0, 4])), "julia");
 
 julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);
 
@@ -243,7 +243,7 @@ See also [`set_format!`](@ref).
 # Examples
 
 ```jldoctest
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> ds[1]
 Python: {'label': 5}

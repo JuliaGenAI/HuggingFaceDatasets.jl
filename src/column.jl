@@ -17,7 +17,7 @@ of a julia-formatted [`Dataset`], e.g. `ds["label"]`.
 # Examples
 
 ```jldoctest
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> ds = with_format(ds, "julia");
 

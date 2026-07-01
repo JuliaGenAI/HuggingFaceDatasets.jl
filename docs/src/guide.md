@@ -11,8 +11,9 @@ This guide covers how the wrapper relates to the underlying Python `datasets` li
 the `"julia"` format and the transform pipeline, the array/image orientation caveat, and
 how to feed a dataset into a Julia data loader.
 
-The examples below build small datasets in memory with
-`datasets.Dataset.from_dict` so that they are self-contained and reproducible. In
+The examples below build small datasets in memory with the [`Dataset`](@ref) constructor
+(which accepts a `Dict` or `NamedTuple` of columns) so that they are self-contained and
+reproducible. In
 practice you will usually obtain a dataset from the Hub with [`load_dataset`](@ref), e.g.
 `load_dataset("ylecun/mnist", split="train")`; everything shown here applies equally to
 those datasets.
@@ -32,11 +33,11 @@ A [`DatasetDict`](@ref) is an `AbstractDict{String, Dataset}`, so `keys`, `value
 `haskey`, `get`, and iteration all work as expected:
 
 ```jldoctest guide
-julia> train = datasets.Dataset.from_dict(pydict(label=[1, 0, 1, 0]));
+julia> train = Dataset((; label=[1, 0, 1, 0]));
 
-julia> test = datasets.Dataset.from_dict(pydict(label=[1, 1]));
+julia> test = Dataset((; label=[1, 1]));
 
-julia> dd = DatasetDict(datasets.DatasetDict(pydict(; train, test)))
+julia> dd = DatasetDict(datasets.DatasetDict(pydict(train=train.py, test=test.py)))
 DatasetDict({
     train: Dataset({
         features: ['label'],
@@ -64,7 +65,7 @@ A [`Dataset`](@ref) supports 1-based indexing, `length`, `firstindex`/`lastindex
 (so `ds[begin]` and `ds[end]` work), and iteration over observations:
 
 ```jldoctest guide
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> length(ds)
 3
@@ -94,7 +95,7 @@ wrapper. Method calls are forwarded to Python, and their results are converted b
 binding for each method:
 
 ```jldoctest guide
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[0, 1, 2, 3])));
+julia> ds = Dataset((; label=[0, 1, 2, 3]));
 
 julia> ds.select(0:1)                       # keep the first two rows
 Dataset({
@@ -137,7 +138,7 @@ Julia-side transform.
 [`set_format!`](@ref) mutates it in place; [`reset_format!`](@ref) clears it.
 
 ```jldoctest guide
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> ds[1]
 Python: {'label': 5}
@@ -177,7 +178,7 @@ raw Python batch, so convert it with [`py2jl`](@ref) first if you want to work w
 types:
 
 ```jldoctest guide
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(x=[1, 2, 3])));
+julia> ds = Dataset((; x=[1, 2, 3]));
 
 julia> ds = with_jltransform(ds) do batch
            b = py2jl(batch)          # convert the Python batch to Julia types first
@@ -227,7 +228,7 @@ The **forwarded Python methods** `ds.map(...)` / `ds.filter(...)` (see
 "PythonCall dialect" (`pyconvert` on the way in, `pylist`/`pydict` on the way out):
 
 ```julia-repl
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> ds.map(x -> pydict(label=pylist([pyconvert(Int, l) + 100 for l in x["label"]])),
               batched=true);          # written against the Python API
@@ -318,7 +319,7 @@ data loaders such as `Flux.DataLoader` work directly:
 ```jldoctest guide
 julia> using MLUtils
 
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(x=[1, 2, 3, 4]))).with_format("julia");
+julia> ds = Dataset((; x=[1, 2, 3, 4])).with_format("julia");
 
 julia> numobs(ds)
 4

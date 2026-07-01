@@ -63,7 +63,7 @@ memory so it is reproducible, but the same applies to any dataset from the Hub:
 ```jldoctest
 julia> using HuggingFaceDatasets, PythonCall
 
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> ds[1]                            # a Python object by default
 Python: {'label': 5}

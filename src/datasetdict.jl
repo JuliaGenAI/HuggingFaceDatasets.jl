@@ -16,11 +16,11 @@ See also [`load_dataset`](@ref) and [`Dataset`](@ref).
 # Examples
 
 ```jldoctest
-julia> train = datasets.Dataset.from_dict(pydict(label=[1, 0, 1, 0]));
+julia> train = Dataset((; label=[1, 0, 1, 0]));
 
-julia> test = datasets.Dataset.from_dict(pydict(label=[1, 1]));
+julia> test = Dataset((; label=[1, 1]));
 
-julia> dd = DatasetDict(datasets.DatasetDict(pydict(; train, test)))
+julia> dd = DatasetDict(datasets.DatasetDict(pydict(train=train.py, test=test.py)))
 DatasetDict({
     train: Dataset({
         features: ['label'],
