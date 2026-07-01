@@ -13,6 +13,10 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      statuses: write
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
