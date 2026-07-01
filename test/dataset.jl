@@ -29,6 +29,42 @@ end
     @test length(collect(ds)) == 3
 end
 
+@testset "construct from Julia data" begin
+    # Dict of scalar vectors round-trips through the julia format
+    ds = Dataset(Dict("label" => [5, 0, 4]))
+    @test ds isa Dataset
+    @test length(ds) == 3
+    @test collect(keys(pyconvert(Dict, ds.py.features))) == ["label"]
+    @test with_format(ds, "julia")[1:3]["label"] == [5, 0, 4]
+
+    # NamedTuple path preserves column names and order
+    ds = Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))
+    @test length(ds) == 3
+    @test ds.column_names == ["label", "text"]
+    dsj = with_format(ds, "julia")
+    @test dsj[1:3]["label"] == [5, 0, 4]
+    @test dsj[1:3]["text"] == ["a", "b", "c"]
+
+    # mixed scalar types each round-trip
+    ds = with_format(Dataset((
+        i = [1, 2], s = ["x", "y"], f = [1.5, 2.5], b = [true, false])), "julia")
+    @test ds[1:2]["i"] == [1, 2]
+    @test ds[1:2]["s"] == ["x", "y"]
+    @test ds[1:2]["f"] == [1.5, 2.5]
+    @test ds[1:2]["b"] == [true, false]
+
+    # jltransform kwarg is applied
+    ds = Dataset(Dict("label" => [5, 0, 4]); jltransform = py2jl)
+    @test ds[1] isa Dict
+    @test ds[1]["label"] == 5
+
+    # array-valued (multi-dim) columns are rejected loudly, not transposed
+    @test_throws ArgumentError Dataset(Dict("x" => [[1, 2], [3, 4]]))
+    @test_throws ArgumentError Dataset(Dict("x" => [rand(2, 2)]))
+    # non-vector columns are rejected
+    @test_throws ArgumentError Dataset(Dict("x" => 5))
+end
+
 @testset "keyword arguments are forwarded to python methods" begin
     # `train_test_split` requires the `test_size` keyword: regression test for the
     # kwargs-forwarding bug where keywords were splatted as positional arguments.

@@ -15,7 +15,7 @@ See also [`load_dataset`](@ref), [`DatasetDict`](@ref), and [`with_format`](@ref
 # Examples
 
 ```jldoctest
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])))
+julia> ds = Dataset((; label=[5, 0, 4]))
 Dataset({
     features: ['label'],
     num_rows: 3
@@ -53,11 +53,61 @@ mutable struct Dataset
     end
 end
 
-## TODO make it work with arbitrary order tensors
-# function Dataset(d::Dict; jltransform = identity)
-#     py = datasets.Dataset.from_dict(d)
-#     return Dataset(py, jltransform)
-# end
+"""
+    Dataset(d::AbstractDict; jltransform = identity)
+    Dataset(nt::NamedTuple; jltransform = identity)
+
+Build a `Dataset` from in-memory Julia data: a `Dict` or `NamedTuple` mapping column
+names to equal-length vectors, delegating to `datasets.Dataset.from_dict`.
+
+Only **scalar-element** columns are supported for now (numbers, strings, booleans, ...).
+Array-valued columns (e.g. a `Vector{Matrix}` image column) are rejected with an
+`ArgumentError` rather than silently transposed, since Julia is column-major while Arrow
+and numpy are row-major. Build those with `datasets.Dataset.from_dict` directly for now.
+
+See also [`with_format`](@ref) and [`jl2py`](@ref).
+
+# Examples
+
+```jldoctest
+julia> ds = Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))
+Dataset({
+    features: ['label', 'text'],
+    num_rows: 3
+})
+
+julia> with_format(ds, "julia")[1:3]["label"]
+3-element Vector{Int64}:
+ 5
+ 0
+ 4
+```
+"""
+Dataset(d::AbstractDict; jltransform = identity) =
+    Dataset(datasets.Dataset.from_dict(_from_dict_pydict(d)), jltransform)
+
+Dataset(nt::NamedTuple; jltransform = identity) =
+    Dataset(datasets.Dataset.from_dict(_from_dict_pydict(nt)), jltransform)
+
+# Convert a Julia column mapping (Dict/NamedTuple of vectors) into a Python dict suitable
+# for `datasets.Dataset.from_dict`, rejecting array-valued (multi-dimensional) columns.
+function _from_dict_pydict(d)
+    py = pydict()
+    for (k, v) in pairs(d)
+        v isa AbstractVector || throw(ArgumentError(
+            "column \"$k\" must be an AbstractVector of scalars, got $(typeof(v))"))
+        et = eltype(v)
+        if et <: AbstractArray || (!isconcretetype(et) && any(x -> x isa AbstractArray, v))
+            throw(ArgumentError(
+                "column \"$k\" has array-valued elements; constructing a Dataset from " *
+                "multi-dimensional columns is not yet supported (elements would be " *
+                "silently transposed). Build it with `datasets.Dataset.from_dict` " *
+                "directly for now."))
+        end
+        py[string(k)] = jl2py(v)   # scalar vector -> python list
+    end
+    return py
+end
 
 function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
@@ -125,7 +175,7 @@ See also [`filter`](@ref).
 # Examples
 
 ```julia
-julia> ds = with_format(Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4]))), "julia");
+julia> ds = with_format(Dataset((; label=[5, 0, 4])), "julia");
 
 julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);
 
@@ -193,7 +243,7 @@ See also [`set_format!`](@ref).
 # Examples
 
 ```jldoctest
-julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+julia> ds = Dataset((; label=[5, 0, 4]));
 
 julia> ds[1]
 Python: {'label': 5}
