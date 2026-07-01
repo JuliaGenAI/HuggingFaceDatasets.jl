@@ -13,6 +13,7 @@ worked examples and background on the transform pipeline.
 ```@docs
 Dataset
 DatasetDict
+Column
 ```
 
 ## Loading

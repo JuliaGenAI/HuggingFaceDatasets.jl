@@ -1,5 +1,5 @@
 """
-    DatasetDict(pyd::Py, jltransform = identity)
+    DatasetDict(py::Py, jltransform = identity)
 
 A `DatasetDict` is a dictionary of `Dataset`s.
 It is a wrapper around a `datasets.DatasetDict` object.
@@ -48,7 +48,7 @@ false
 ```
 """
 mutable struct DatasetDict <: AbstractDict{String, Dataset}
-    pyd::Py
+    py::Py
     jltransform
 
     function DatasetDict(pydatasetdict::Py, jltransform = identity)
@@ -65,7 +65,7 @@ function Base.getproperty(d::DatasetDict, s::Symbol)
     elseif s === :with_format
         return format -> with_format(d, format)
     else
-        res = getproperty(getfield(d, :pyd), s)
+        res = getproperty(getfield(d, :py), s)
         if pycallable(res)
             return CallableWrapper(res)
         else
@@ -74,20 +74,20 @@ function Base.getproperty(d::DatasetDict, s::Symbol)
     end
 end
 
-Base.length(d::DatasetDict) = length(d.pyd)
+Base.length(d::DatasetDict) = length(d.py)
 
 function Base.getindex(d::DatasetDict, i::AbstractString)
-    x = d.pyd[i]
+    x = d.py[i]
     return Dataset(x, d.jltransform)
 end
 
-Base.keys(d::DatasetDict) = String[pyconvert(String, k) for k in d.pyd.keys()]
+Base.keys(d::DatasetDict) = String[pyconvert(String, k) for k in d.py.keys()]
 
 Base.values(d::DatasetDict) = Dataset[d[k] for k in keys(d)]
 
 Base.pairs(d::DatasetDict) = Pair{String,Dataset}[k => d[k] for k in keys(d)]
 
-Base.haskey(d::DatasetDict, k::AbstractString) = pyconvert(Bool, pyin(k, d.pyd))
+Base.haskey(d::DatasetDict, k::AbstractString) = pyconvert(Bool, pyin(k, d.py))
 
 Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
 
@@ -102,15 +102,15 @@ end
 # The generic `AbstractDict` `merge`/`filter` build the result with `empty(d)`, which
 # returns a plain `Dict` and drops the wrapper. Override them to return a `DatasetDict`
 # backed by a fresh `datasets.DatasetDict`, preserving `d`'s `jltransform`.
-_pyds(v::Dataset) = getfield(v, :pyds)
-_pyds(v::Py) = v
+_py(v::Dataset) = getfield(v, :py)
+_py(v::Py) = v
 
 function _wrap_pairs(itr, jltransform)
-    pyd = datasets.DatasetDict()
+    py = datasets.DatasetDict()
     for (k, v) in itr
-        pyd[String(k)] = _pyds(v)
+        py[String(k)] = _py(v)
     end
-    return DatasetDict(pyd, jltransform)
+    return DatasetDict(py, jltransform)
 end
 
 Base.filter(f, d::DatasetDict) = _wrap_pairs(Iterators.filter(f, pairs(d)), d.jltransform)
@@ -121,9 +121,9 @@ end
 
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
     haskey(stackdict, d) && return stackdict[d]::DatasetDict
-    pyd = pycopy.deepcopy(getfield(d, :pyd))
+    py = pycopy.deepcopy(getfield(d, :py))
     jltransform = Base.deepcopy_internal(getfield(d, :jltransform), stackdict)
-    d2 = DatasetDict(pyd, jltransform)
+    d2 = DatasetDict(py, jltransform)
     stackdict[d] = d2
     return d2
 end
@@ -132,16 +132,16 @@ end
 # but has an independent format, so `set_format!`/`set_jltransform!` on the copy
 # do not affect the original. Used internally by the copy-on-write helpers.
 function Base.copy(d::DatasetDict)
-    pyd = pycopy.copy(getfield(d, :pyd))
-    return DatasetDict(pyd, getfield(d, :jltransform))
+    py = pycopy.copy(getfield(d, :py))
+    return DatasetDict(py, getfield(d, :jltransform))
 end
 
-Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
+Base.show(io::IO, ds::DatasetDict) = print(io, ds.py)
 
 # `DatasetDict` is an `AbstractDict`, so without this method the REPL would use the
 # generic `AbstractDict` multi-line display. Show the Python-style repr instead, which
 # mirrors `datasets.DatasetDict` and nests the `Dataset` summaries.
-Base.show(io::IO, ::MIME"text/plain", ds::DatasetDict) = print(io, ds.pyd)
+Base.show(io::IO, ::MIME"text/plain", ds::DatasetDict) = print(io, ds.py)
 
 """
     with_jltransform(d::DatasetDict, transform)
@@ -196,10 +196,10 @@ version of [`with_format`](@ref).
 """
 function set_format!(d::DatasetDict, format)
     if format == "julia"
-        d.pyd.reset_format()
+        d.py.reset_format()
         d.jltransform = py2jl
     else
-        d.pyd.set_format(format)
+        d.py.set_format(format)
         d.jltransform = identity
     end
     return d
@@ -213,7 +213,7 @@ set_format!(d::DatasetDict) = reset_format!(d)
 Reset the format of `d`, removing any python format and julia transform.
 """
 function reset_format!(d::DatasetDict)
-    d.pyd.set_format(nothing)
+    d.py.set_format(nothing)
     d.jltransform = identity
     return d
 end
