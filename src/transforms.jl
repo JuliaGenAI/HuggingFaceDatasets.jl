@@ -5,6 +5,19 @@
 Convert Python types to Julia types. It will recursively traverse built-in python
 containers such as lists, tuples, dicts, and sets, and convert all nested objects.
 On the leaves, it will call either `pyconvert(Any, x)` or [`numpy2jl`](@ref).
+
+# Examples
+
+```jldoctest
+julia> py2jl(pylist([1, 2, 3]))
+3-element Vector{Int64}:
+ 1
+ 2
+ 3
+
+julia> py2jl(pytuple((1, pylist([2, 3]))))
+(1, [2, 3])
+```
 """
 py2jl(x) = pyconvert(Any, x)
 
@@ -18,7 +31,7 @@ function py2jl(x::Py)
     elseif pyisinstance(x, pytype(pylist()))
         return [py2jl(x) for x in x]
     elseif pyisinstance(x, pytype(pytuple()))
-        return tuple(py2jl(x) for x in x)
+        return Tuple(py2jl(el) for el in x)
     elseif pyisinstance(x, pytype(pydict()))
         return Dict(py2jl(k) => py2jl(v) for (k, v) in x.items())
     elseif pyisinstance(x, pytype(pyset()))
@@ -53,6 +66,17 @@ For row major python arrays, the returned Julia array has permuted dimensions.
 
 This function is called by [`py2jl`](@ref).
 See also [`jl2numpy`](@ref).
+
+# Examples
+
+```jldoctest
+julia> y = jl2numpy([1 2 3; 4 5 6]);   # a 3×2 numpy array
+
+julia> numpy2jl(y)                      # back to a 2×3 Julia array
+2×3 Matrix{Int64}:
+ 1  2  3
+ 4  5  6
+```
 """
 function numpy2jl(x::Py)
     return DLPack.from_dlpack(x)
@@ -67,6 +91,20 @@ Julia array (and vice versa). The returned numpy array has permuted dimensions w
 respect to the input Julia array, since numpy is row-major and Julia is column-major.
 
 See also [`numpy2jl`](@ref).
+
+# Examples
+
+```jldoctest
+julia> x = [1 2 3; 4 5 6];   # a 2×3 Julia array
+
+julia> y = jl2numpy(x);      # numpy is row-major, so the axes are reversed
+
+julia> y.shape
+Python: (3, 2)
+
+julia> numpy2jl(y) == x
+true
+```
 """
 function jl2numpy(x::AbstractArray)
     # `np.asarray(Py(x))` exposes `x`'s memory to numpy through the buffer protocol

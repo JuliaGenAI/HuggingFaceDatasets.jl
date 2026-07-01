@@ -1,7 +1,8 @@
 using HuggingFaceDatasets
 using Documenter
 
-DocMeta.setdocmeta!(HuggingFaceDatasets, :DocTestSetup, :(using HuggingFaceDatasets); recursive=true)
+DocMeta.setdocmeta!(HuggingFaceDatasets, :DocTestSetup,
+    :(using HuggingFaceDatasets, PythonCall); recursive=true)
 
 makedocs(;
     modules=[HuggingFaceDatasets],
@@ -15,6 +16,7 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Guide" => "guide.md",
         "API" => "api.md",
     ],
 )

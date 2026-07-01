@@ -3,11 +3,43 @@
 
 A Julia wrapper around an object of the python `datasets.Dataset` class.
 
-Provides: 
+Provides:
 - 1-based indexing.
 - All python class' methods from  `datasets.Dataset`.
 
-See also [`load_dataset`](@ref) and [`DatasetDict`](@ref).
+Usually constructed via [`load_dataset`](@ref), but any `datasets.Dataset` object can
+be wrapped directly.
+
+See also [`load_dataset`](@ref), [`DatasetDict`](@ref), and [`with_format`](@ref).
+
+# Examples
+
+```jldoctest
+julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])))
+Dataset({
+    features: ['label'],
+    num_rows: 3
+})
+
+julia> length(ds)
+3
+
+julia> ds[1]      # a single observation, as a Python object
+Python: {'label': 5}
+
+julia> ds[end]
+Python: {'label': 4}
+
+julia> ds = with_format(ds, "julia");   # convert observations to Julia types
+
+julia> ds[1]
+Dict{String, Int64} with 1 entry:
+  "label" => 5
+
+julia> ds[1:3]    # a range or vector returns a batch (columns -> vectors)
+Dict{String, Vector{Int64}} with 1 entry:
+  "label" => [5, 0, 4]
+```
 """
 mutable struct Dataset
     pyds::Py
@@ -104,18 +136,17 @@ See also [`set_format!`](@ref).
 
 # Examples
 
-```julia
-julia> ds = load_dataset("ylecun/mnist", split="test");
+```jldoctest
+julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
 
 julia> ds[1]
-Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B5B4C1F0>, 'label': 7}
+Python: {'label': 5}
 
 julia> ds = with_format(ds, "julia");
 
 julia> ds[1]
-Dict{String, Any} with 2 entries:
-  "label" => 7
-  "image" => UInt8[0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00; … ; 0x00 0x00 … 0x00 0x00; 0x00 0x00 … 0x00 0x00]
+Dict{String, Int64} with 1 entry:
+  "label" => 5
 ```
 """
 function with_format(ds::Dataset, format::AbstractString)

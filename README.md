@@ -6,7 +6,13 @@
 
 HuggingFaceDatasets.jl is a non-official julia wrapper around the python package  `datasets` from Hugging Face. `datasets` contains a large collection of machine learning datasets (see [here](https://huggingface.co/datasets) for a list) that this package makes available to the julia ecosystem.
 
-This package is built on top of [PythonCall.jl](https://github.com/cjdoris/PythonCall.jl).
+It wraps the python `datasets.Dataset` and `datasets.DatasetDict` types and:
+
+- forwards every method of the underlying python object, so the full `datasets` API (`map`, `filter`, `shuffle`, `train_test_split`, `cast_column`, …) is available;
+- uses 1-based indexing, julia iteration, and other julia conventions;
+- offers a lazy `"julia"` format that converts observations to native julia types (arrays, images, dictionaries) on access, copylessly when possible.
+
+This package is built on top of [PythonCall.jl](https://github.com/JuliaPy/PythonCall.jl). See the [documentation](https://JuliaGenAI.github.io/HuggingFaceDatasets.jl/dev) for a full guide covering method forwarding, the transform workflow, the array/image orientation caveat, and integration with MLUtils/Flux data loaders.
 
 ## Installation
 
@@ -52,4 +58,4 @@ Dict{String, Vector} with 2 entries:
 
 ## Troubleshooting
 
-- If having problems in resolving the CondaPkg environment, try to set `ENV["JULIA_CONDAPKG_OPENSSL_VERSION"] = true`before loading the package. See more details [here](https://github.com/JuliaPy/CondaPkg.jl?tab=readme-ov-file#preferences)
+- If having problems in resolving the CondaPkg environment, try to set `ENV["JULIA_CONDAPKG_OPENSSL_VERSION"] = true` before loading the package. See more details [here](https://github.com/JuliaPy/CondaPkg.jl?tab=readme-ov-file#preferences)
