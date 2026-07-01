@@ -25,8 +25,8 @@ end
         @test ds[1]["objects"] isa Dict{String, Vector}
         imgs = ds[1:2]["image"]
         @test imgs isa Vector{<:AbstractArray}
-        @test imgs isa Vector{<:AbstractMatrix} broken=true
-        @test imgs isa Vector{<:AbstractMatrix{RGB{N0f8}}} broken=true
+        @test imgs isa Vector{<:AbstractMatrix}
+        @test imgs isa Vector{<:AbstractMatrix{RGB{N0f8}}}
         @test size(imgs[1]) == (1920, 1088)
         @test imgs[1] isa AbstractMatrix{RGB{N0f8}}
         @test ds[1:2]["objects"] isa Vector{Dict{String, Vector}}

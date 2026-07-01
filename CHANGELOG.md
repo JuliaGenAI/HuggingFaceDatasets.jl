@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mirroring the `Dataset` methods.
 
 ### Changed
+- `DatasetDict` now has a dedicated `text/plain` display mirroring the Python
+  `datasets.DatasetDict` repr (nested `Dataset` summaries), instead of the generic
+  `AbstractDict` multi-line display.
 - `py2jl` now converts any `PIL.Image.Image` (BMP/GIF/TIFF/WebP and images produced by
   transforms), not only PNG/JPEG. Image modes other than RGB and grayscale (e.g. RGBA,
   CMYK, palette) return the raw array instead of raising an error.
@@ -28,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `jl2numpy` works again with numpy ≥ 2.1, which had broken the DLPack export path. It
   now shares memory through the buffer protocol; the returned numpy array is writable,
   and mutations propagate in both directions.
+- `py2jl` on a Python tuple now returns a proper Julia tuple of converted elements. It
+  previously returned a 1-tuple wrapping an unevaluated generator.
 
 ## [0.3.4]
 

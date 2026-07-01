@@ -8,7 +8,44 @@ The `jltransform` is applied to each [`Dataset`](@ref).
 The [`py2jl`](@ref) transform provided by this package
 converts python types to julia types.
 
+A `DatasetDict` is an `AbstractDict{String, Dataset}`, so `keys`, `values`, `haskey`,
+`get`, and iteration work as expected.
+
 See also [`load_dataset`](@ref) and [`Dataset`](@ref).
+
+# Examples
+
+```jldoctest
+julia> train = datasets.Dataset.from_dict(pydict(label=[1, 0, 1, 0]));
+
+julia> test = datasets.Dataset.from_dict(pydict(label=[1, 1]));
+
+julia> dd = DatasetDict(datasets.DatasetDict(pydict(; train, test)))
+DatasetDict({
+    train: Dataset({
+        features: ['label'],
+        num_rows: 4
+    })
+    test: Dataset({
+        features: ['label'],
+        num_rows: 2
+    })
+})
+
+julia> collect(keys(dd))
+2-element Vector{String}:
+ "train"
+ "test"
+
+julia> dd["train"]
+Dataset({
+    features: ['label'],
+    num_rows: 4
+})
+
+julia> haskey(dd, "validation")
+false
+```
 """
 mutable struct DatasetDict <: AbstractDict{String, Dataset}
     pyd::Py
@@ -74,6 +111,11 @@ function Base.copy(d::DatasetDict)
 end
 
 Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
+
+# `DatasetDict` is an `AbstractDict`, so without this method the REPL would use the
+# generic `AbstractDict` multi-line display. Show the Python-style repr instead, which
+# mirrors `datasets.DatasetDict` and nests the `Dataset` summaries.
+Base.show(io::IO, ::MIME"text/plain", ds::DatasetDict) = print(io, ds.pyd)
 
 """
     with_jltransform(d::DatasetDict, transform)
