@@ -10,7 +10,7 @@ converts python types to julia types.
 
 See also [`load_dataset`](@ref) and [`Dataset`](@ref).
 """
-mutable struct DatasetDict
+mutable struct DatasetDict <: AbstractDict{String, Dataset}
     pyd::Py
     jltransform
 
@@ -41,6 +41,18 @@ function Base.getindex(d::DatasetDict, i::AbstractString)
     x = d.pyd[i]
     return Dataset(x, d.jltransform)
 end
+
+Base.keys(d::DatasetDict) = String[pyconvert(String, k) for k in d.pyd.keys()]
+
+Base.values(d::DatasetDict) = Dataset[d[k] for k in keys(d)]
+
+Base.pairs(d::DatasetDict) = Pair{String,Dataset}[k => d[k] for k in keys(d)]
+
+Base.haskey(d::DatasetDict, k::AbstractString) = pyconvert(Bool, pyin(k, d.pyd))
+
+Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
+
+Base.get(d::DatasetDict, k::AbstractString, default) = haskey(d, k) ? d[k] : default
 
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
     haskey(stackdict, d) && return stackdict[d]::DatasetDict
