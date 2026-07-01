@@ -32,10 +32,18 @@ with_jltransform
 set_jltransform!
 ```
 
+## Transforming
+
+```@docs
+map(f, ::Dataset)
+filter(f, ::Dataset)
+```
+
 ## Type conversion
 
 ```@docs
 py2jl
+jl2py
 numpy2jl
 jl2numpy
 ```

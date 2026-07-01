@@ -196,3 +196,28 @@ end
     @test getfield(dsn.select(0:1), :jltransform) === identity
     @test dsn.select(0:1).format["type"] == "numpy"
 end
+
+@testset "julia-friendly map / filter" begin
+    ds = Dataset(HuggingFaceDatasets.datasets.Dataset.from_dict(
+        pydict(Dict("label" => pylist([5, 0, 4, 3, 2, 1])))))
+    dsj = with_format(ds, "julia")
+
+    # `map` bridges Julia values on both sides: pure-Julia callback, no PythonCall dialect.
+    ds2 = map(x -> Dict("label" => x["label"] .+ 100), dsj; batched=true)
+    @test ds2 isa Dataset
+    @test ds2[1:6]["label"] == [105, 100, 104, 103, 102, 101]  # julia format preserved
+
+    # non-batched map (one example at a time)
+    ds3 = map(x -> Dict("label" => x["label"] + 1), dsj)
+    @test ds3[1:6]["label"] == [6, 1, 5, 4, 3, 2]
+
+    # `filter` with a Julia predicate returning a Bool
+    ds4 = filter(x -> x["label"] > 2, dsj)
+    @test ds4 isa Dataset
+    @test sort(ds4[1:length(ds4)]["label"]) == [3, 4, 5]
+
+    # batched filter returning a Vector{Bool}, and format preservation
+    ds5 = filter(x -> x["label"] .< 3, dsj; batched=true)
+    @test ds5[1] isa Dict{String, Int64}
+    @test sort(ds5[1:length(ds5)]["label"]) == [0, 1, 2]
+end

@@ -27,6 +27,30 @@
     @test collect(col) == [5, 0, 4]
 end
 
+@testset "jl2py" begin
+    # scalars fall back to PythonCall's default conversion
+    @test pyconvert(Int, jl2py(3)) == 3
+    @test pyconvert(String, jl2py("a")) == "a"
+
+    # a Py passes through unchanged
+    p = pylist([1, 2])
+    @test jl2py(p) === p
+
+    # vectors -> python lists (element-wise), dicts/namedtuples -> python dicts
+    @test pyisinstance(jl2py([1, 2, 3]), pytype(pylist()))
+    @test py2jl(jl2py(Dict("a" => [1, 2], "b" => [3, 4]))) == Dict("a" => [1, 2], "b" => [3, 4])
+    @test py2jl(jl2py((label = [1, 2], x = [3, 4]))) == Dict("label" => [1, 2], "x" => [3, 4])
+    @test py2jl(jl2py((1, "a", [2, 3]))) == (1, "a", [2, 3])
+
+    # N-D numeric arrays go through jl2numpy (axis-reversed, round-trips via py2jl)
+    x = Float32[1 2 3; 4 5 6]
+    @test py2jl(jl2py(x)) == x
+
+    # a vector of arrays becomes a python list of numpy arrays
+    v = [Int[1, 2], Int[3, 4]]
+    @test py2jl(jl2py(v)) == v
+end
+
 @testset "jl2numpy / numpy2jl" begin
     # round-trip across dtypes and dimensionalities (dims are permuted then permuted back)
     for x in Any[Float32[1 2; 3 4], Int64[1, 2, 3, 4], rand(UInt8, 2, 3, 4)]
