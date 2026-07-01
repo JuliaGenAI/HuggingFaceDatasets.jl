@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `Column`, a lazy 1-based `AbstractVector` view over a single dataset column. It
+  wraps the python `datasets.Column` returned by `dataset[column_name]` (datasets ≥ 4)
+  and converts elements with `py2jl` on access; `collect(col)` materializes it.
 - `Base.firstindex`/`Base.lastindex` for `Dataset`, so `ds[begin]` and `ds[end]` work.
 - `Base.iterate` for `Dataset`; it iterates over observations, enabling
   `for obs in ds`, `collect(ds)`, and comprehensions.
@@ -15,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mirroring the `Dataset` methods.
 
 ### Changed
+- Bumped the `datasets` Python dependency to `>=4.0, <5`.
+- `py2jl` on a `datasets.Column` (and hence string indexing of a julia-formatted
+  `Dataset`, e.g. `ds["label"]`) now returns a lazy `Column` view instead of eagerly
+  materializing the whole column. The result still behaves like a vector (indexing,
+  slicing, iteration, broadcasting, comparison); call `collect` to get a plain `Vector`.
 - `DatasetDict` now has a dedicated `text/plain` display mirroring the Python
   `datasets.DatasetDict` repr (nested `Dataset` summaries), instead of the generic
   `AbstractDict` multi-line display.

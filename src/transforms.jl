@@ -6,6 +6,10 @@ Convert Python types to Julia types. It will recursively traverse built-in pytho
 containers such as lists, tuples, dicts, and sets, and convert all nested objects.
 On the leaves, it will call either `pyconvert(Any, x)` or [`numpy2jl`](@ref).
 
+A `datasets.Column` (the lazy column view returned by `dataset[column_name]`) is
+wrapped in a lazy [`Column`](@ref), whose elements are converted on access rather
+than all at once.
+
 # Examples
 
 ```jldoctest
@@ -27,6 +31,11 @@ function py2jl(x::Py)
         return Dataset(x)
     elseif pyisinstance(x, datasets.DatasetDict)
         return DatasetDict(x)
+    # handle datasets.Column (the lazy column view that `dataset[column_name]`
+    # returns in datasets >= 4) by wrapping it in a lazy `Column` rather than
+    # materializing it here
+    elseif pyisinstance(x, datasets.Column)
+        return Column(x)
     # handle list, tuple, dict, and set
     elseif pyisinstance(x, pytype(pylist()))
         return [py2jl(x) for x in x]

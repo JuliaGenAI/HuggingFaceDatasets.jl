@@ -68,8 +68,17 @@ end
 @testset "with_format(julia) - mnist" begin
     ds = with_format(mnist, "julia")
     @test ds.format["type"] === nothing
-    @test ds["label"] isa Vector{Int}
-    @test length(ds["label"]) == 10000
+
+    # `ds[column]` returns a lazy `Column` view, not a materialized vector
+    col = ds["label"]
+    @test col isa HuggingFaceDatasets.Column{Int}
+    @test col isa AbstractVector{Int}
+    @test length(col) == 10000
+    @test col[1] == 7
+    @test col[1:2] == [7, 2]
+    @test col[[2, 1]] == [2, 7]
+    @test collect(col) isa Vector{Int}
+    @test length(collect(col)) == 10000
 
     x = ds[1]
     @test x isa Dict

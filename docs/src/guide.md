@@ -151,7 +151,17 @@ Dict{String, Int64} with 1 entry:
 julia> ds[1:3]                          # a batch: each column becomes a vector
 Dict{String, Vector{Int64}} with 1 entry:
   "label" => [5, 0, 4]
+
+julia> ds["label"]                      # a whole column: a lazy `Column` view
+3-element HuggingFaceDatasets.Column{Int64}:
+ 5
+ 0
+ 4
 ```
+
+Indexing by column name returns a lazy [`Column`](@ref): it behaves like a vector
+(indexing, slicing, iteration, broadcasting) but converts elements only on access, so
+the whole column is never materialized at once. Call `collect` to get a plain `Vector`.
 
 The special `"julia"` format sets the Julia transform to [`py2jl`](@ref), which
 recursively converts Python containers (lists, tuples, dicts, sets), numpy arrays, and
