@@ -70,6 +70,18 @@ end
     @test d["test"].format["type"] === nothing
 end
 
+@testset "reset_format! / set_format! (DatasetDict)" begin
+    d = with_format(mnist, "julia")
+    @test d["test"][1] isa Dict                              # julia format active
+    reset_format!(d)
+    @test pyisinstance(d["test"][1], pytype(pydict()))       # back to raw python
+    set_format!(d, "numpy")
+    @test d["test"].format["type"] == "numpy"
+    set_format!(d)                                           # single-arg form resets
+    @test d["test"].format["type"] === nothing
+    @test mnist["test"].format["type"] === nothing          # original untouched
+end
+
 @testset "set_jltransform!" begin
     d = deepcopy(mnist)
     set_jltransform!(d) do x

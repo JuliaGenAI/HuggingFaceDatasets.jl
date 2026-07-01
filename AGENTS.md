@@ -52,3 +52,20 @@ using Pkg; Pkg.test()
   `no_ci.jl` (larger downloads: cifar10, beans, cppe-5) **only when `CI` is
   not `"true"`**. Set `ENV["CI"]="true"` to mimic CI and skip those.
 - The first run downloads datasets and provisions the conda env, so it is slow.
+
+## Changelog
+
+Keep [`CHANGELOG.md`](CHANGELOG.md) up to date. It follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses
+[Semantic Versioning](https://semver.org/).
+
+- Any user-visible change (bug fix; added, changed, deprecated, or removed method or
+  behavior) must add a bullet under the `## [Unreleased]` heading, in the matching
+  category: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
+  Purely internal changes (refactors, tests, CI, doc typos) don't need an entry.
+- Write entries for users, in the present tense, describing the effect rather than the
+  code change.
+- On release: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty
+  `## [Unreleased]` above it, bump `version` in `Project.toml` per SemVer (new feature
+  → minor, bug fix → patch; for `0.x`, breaking → minor), and update the compare links
+  at the bottom of the file.

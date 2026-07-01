@@ -26,15 +26,16 @@ function py2jl(x::Py)
     # handle numpy arrays   
     elseif pyisinstance(x, np.ndarray)
         return numpy2jl(x)
-    # handle PIL images
-    elseif pyisinstance(x, PIL.PngImagePlugin.PngImageFile) || pyisinstance(x, PIL.JpegImagePlugin.JpegImageFile)
+    # handle PIL images (any subclass: PNG/JPEG/BMP/GIF/TIFF/... and transform outputs)
+    elseif pyisinstance(x, PIL.Image.Image)
         a = numpy2jl(np.array(x))
         if ndims(a) == 3 && size(a, 1) == 3
             return colorview(RGB{N0f8}, a)
         elseif ndims(a) == 2
             return reinterpret(Gray{N0f8}, a)
         else
-            error("Unknown image format")
+            # other modes (e.g. RGBA, CMYK, palette): return the raw (permuted) array
+            return a
         end
     # handle other types
     else
@@ -60,12 +61,19 @@ end
 """
     jl2numpy(x)
 
-Convert a Julia array to a numpy array using DLPack.jl.
-The conversion is copyless, and mutations to the numpy array are reflected in the Julia array.
-The returned numpy array has permuted dimensions with respect to the input Julia array.
+Convert a Julia array to a numpy array, sharing memory via the buffer protocol.
+The conversion is copyless, and mutations to the numpy array are reflected in the
+Julia array (and vice versa). The returned numpy array has permuted dimensions with
+respect to the input Julia array, since numpy is row-major and Julia is column-major.
 
 See also [`numpy2jl`](@ref).
 """
 function jl2numpy(x::AbstractArray)
-    return DLPack.share(x, np.from_dlpack)
+    # `np.asarray(Py(x))` exposes `x`'s memory to numpy through the buffer protocol
+    # without copying, yielding a writable view with the same shape but column-major
+    # (F-contiguous) strides. `.T` reverses the axes so the result matches the
+    # dimension permutation of `numpy2jl`, i.e. `numpy2jl(jl2numpy(x)) == x`.
+    # (We avoid `np.from_dlpack` here: numpy >= 2.1 imports DLPack buffers as
+    # read-only, which would break the documented write-back behaviour.)
+    return np.asarray(Py(x)).T
 end

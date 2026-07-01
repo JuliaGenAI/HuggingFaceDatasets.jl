@@ -14,7 +14,9 @@ mutable struct Dataset
     jltransform
 
     function Dataset(pyds::Py, jltransform = identity)
-        @assert pyisinstance(pyds, datasets.Dataset)
+        if !pyisinstance(pyds, datasets.Dataset)
+            throw(ArgumentError("expected a `datasets.Dataset`, got $(pytype(pyds))"))
+        end
         return new(pyds, jltransform)
     end
 end
@@ -42,10 +44,20 @@ end
 
 Base.length(ds::Dataset) = length(ds.pyds)
 
+Base.firstindex(ds::Dataset) = 1
+Base.lastindex(ds::Dataset) = length(ds)
+
+# Iterate over observations, so that `for obs in ds`, `collect(ds)`, etc. work.
+function Base.iterate(ds::Dataset, state=(1, length(ds)))
+    i, n = state
+    i > n && return nothing
+    return ds[i], (i + 1, n)
+end
+
 Base.getindex(ds::Dataset, ::Colon) = ds[1:length(ds)]
 
 function Base.getindex(ds::Dataset, i::AbstractVector{<:Integer})
-    @assert all(>(0), i)
+    all(≥(1), i) || throw(BoundsError(ds, i))
     x = getfield(ds, :pyds)[i .- 1]
     return ds.jltransform(x)
 end
