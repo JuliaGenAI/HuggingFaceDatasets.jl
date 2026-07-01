@@ -61,9 +61,21 @@ function Base.getindex(ds::Dataset, i::AbstractString)
     return ds.jltransform(d)[i]
 end
 
-function Base.deepcopy(ds::Dataset)
-    pyds = copy.deepcopy(ds.pyds)
-    return Dataset(pyds, ds.jltransform)
+function Base.deepcopy_internal(ds::Dataset, stackdict::IdDict)
+    haskey(stackdict, ds) && return stackdict[ds]::Dataset
+    pyds = pycopy.deepcopy(getfield(ds, :pyds))
+    jltransform = Base.deepcopy_internal(getfield(ds, :jltransform), stackdict)
+    ds2 = Dataset(pyds, jltransform)
+    stackdict[ds] = ds2
+    return ds2
+end
+
+# Shallow copy: the returned dataset shares the underlying Arrow data with `ds`
+# but has an independent format, so `set_format!`/`set_jltransform!` on the copy
+# do not affect the original. Used internally by the copy-on-write helpers.
+function Base.copy(ds::Dataset)
+    pyds = pycopy.copy(getfield(ds, :pyds))
+    return Dataset(pyds, getfield(ds, :jltransform))
 end
 
 Base.show(io::IO, ds::Dataset) = print(io, ds.pyds)
@@ -95,7 +107,7 @@ Dict{String, Any} with 2 entries:
 ```
 """
 function with_format(ds::Dataset, format::AbstractString)
-    ds = deepcopy(ds)
+    ds = copy(ds)
     return set_format!(ds, format)
 end
 
@@ -142,7 +154,7 @@ If `transform` is `nothing` or `identity`, the returned dataset will not be tran
 See also [`set_jltransform!`](@ref) for the mutating version.
 """
 function with_jltransform(ds::Dataset, transform)
-    ds = deepcopy(ds)
+    ds = copy(ds)
     return set_jltransform!(ds, transform)
 end
 
