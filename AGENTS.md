@@ -35,12 +35,7 @@ that lazily converts observations to Julia types).
 Managed by [CondaPkg.jl](https://github.com/JuliaPy/CondaPkg.jl) via
 `CondaPkg.toml` (conda-forge channel): `datasets`, `numpy`, `pillow`.
 
-- `datasets` is pinned to `>=3.0, <4`. Do **not** lower the floor below 3.0:
-  older `datasets` builds use `pyarrow.PyExtensionType` (removed in pyarrow 18+)
-  and fail to import on a fresh solve that picks Python 3.14.
-- Recent `huggingface_hub` rejects legacy single-word dataset ids. Always use
-  fully-namespaced ids, e.g. `ylecun/mnist`, `nyu-mll/glue`, `uoft-cs/cifar10`,
-  `AI-Lab-Makerere/beans`, `rishitdagli/cppe-5` — never bare `mnist`, `glue`, …
+- `datasets` is pinned to `>=3.0, <4`. Do **not** lower the floor below 3.0.
 
 ## Running tests
 
@@ -57,21 +52,3 @@ using Pkg; Pkg.test()
   `no_ci.jl` (larger downloads: cifar10, beans, cppe-5) **only when `CI` is
   not `"true"`**. Set `ENV["CI"]="true"` to mimic CI and skip those.
 - The first run downloads datasets and provisions the conda env, so it is slow.
-
-## Building docs / doctests
-
-From `docs/` (`env_path = docs/`):
-
-```julia
-using Pkg; Pkg.instantiate(); include("make.jl")
-```
-
-`makedocs` runs doctests. Note the docstring examples use ```` ```julia ````
-(not ```` ```jldoctest ````) fenced blocks, so they are **not** executed — keep
-them accurate manually. Output goes to `docs/build/` (gitignored).
-
-## Conventions
-
-- Prefer Julia; follow the surrounding style.
-- Branch naming: `cl/<name>`. Commit/push only when asked.
-- `Manifest.toml`, `.CondaPkg/`, and `docs/build/` are gitignored — don't commit them.
