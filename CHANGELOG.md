@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CMYK, palette) return the raw array instead of raising an error.
 - Invalid arguments now raise `ArgumentError`, and out-of-range indices raise
   `BoundsError`, instead of `AssertionError`.
+- `get(::DatasetDict, key, default)` now does a single Python round-trip (via
+  `dict.get`) instead of a separate `haskey` + lookup.
 
 ### Fixed
 - Keyword arguments are correctly forwarded to wrapped Python methods (e.g.
