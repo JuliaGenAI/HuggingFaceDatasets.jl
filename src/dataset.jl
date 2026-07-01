@@ -105,6 +105,62 @@ function Base.getindex(ds::Dataset, i::AbstractString)
     return ds.jltransform(d)[i]
 end
 
+"""
+    map(f, ds::Dataset; kws...)
+
+Apply `f` to `ds` through `datasets`' `map`, bridging Julia values on both sides: each
+example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees
+it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). This lets you
+write pure-Julia transforms while still getting `datasets`' batching, caching, and
+multiprocessing.
+
+Keyword arguments (`batched`, `num_proc`, `remove_columns`, ...) are forwarded to the
+Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
+
+Use `ds.map(...)` (the forwarded Python method) if you need to hand `map` a raw Python
+callback instead.
+
+See also [`filter`](@ref).
+
+# Examples
+
+```julia
+julia> ds = with_format(Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4]))), "julia");
+
+julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);
+
+julia> ds2[1:3]["label"]
+3-element Vector{Int64}:
+ 105
+ 100
+ 104
+```
+"""
+function Base.map(f, ds::Dataset; kws...)
+    g = x -> jl2py(f(py2jl(x)))
+    y = getfield(ds, :py).map(g; kws...)
+    return Dataset(y, getfield(ds, :jltransform))
+end
+
+"""
+    filter(f, ds::Dataset; kws...)
+
+Filter `ds` through `datasets`' `filter`, bridging Julia values: each example (or batch,
+with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f` returns
+a `Bool` (or, when `batched=true`, a `Vector{Bool}`), converted back to Python with
+[`jl2py`](@ref).
+
+Keyword arguments are forwarded to the Python `filter`; the parent's julia format/transform
+is preserved on the returned `Dataset`.
+
+See also [`map`](@ref).
+"""
+function Base.filter(f, ds::Dataset; kws...)
+    g = x -> jl2py(f(py2jl(x)))
+    y = getfield(ds, :py).filter(g; kws...)
+    return Dataset(y, getfield(ds, :jltransform))
+end
+
 function Base.deepcopy_internal(ds::Dataset, stackdict::IdDict)
     haskey(stackdict, ds) && return stackdict[ds]::Dataset
     py = pycopy.deepcopy(getfield(ds, :py))

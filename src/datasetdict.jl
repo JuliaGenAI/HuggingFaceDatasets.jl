@@ -95,7 +95,7 @@ Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
 # with a `None` sentinel both tests membership and fetches the value at once. Stored
 # values are always `Dataset`s, so `None` unambiguously means "absent".
 function Base.get(d::DatasetDict, k::AbstractString, default)
-    x = d.pyd.get(k, nothing)
+    x = d.py.get(k, nothing)
     return pyis(x, pybuiltins.None) ? default : Dataset(x, d.jltransform)
 end
 

@@ -124,3 +124,50 @@ function jl2numpy(x::AbstractArray)
     # read-only, which would break the documented write-back behaviour.)
     return np.asarray(Py(x)).T
 end
+
+"""
+    jl2py(x)
+
+Convert Julia values to Python, the inverse of [`py2jl`](@ref). Recursively traverses
+`AbstractDict`, `NamedTuple`, `Tuple`, and `AbstractVector` containers, converting the
+leaves. Multi-dimensional numeric `AbstractArray`s are converted with [`jl2numpy`](@ref)
+(copyless, with the documented axis reversal); other leaves are handed to PythonCall's
+default `Py` conversion.
+
+This is the write-path dual of `py2jl`, used to bridge pure-Julia callbacks into the
+Python `datasets` API (see the Julia-friendly [`map`](@ref) / [`filter`](@ref) overloads).
+
+# Examples
+
+```jldoctest
+julia> jl2py(Dict("label" => [1, 2, 3]))
+Python: {'label': [1, 2, 3]}
+
+julia> jl2py((1, "a", [2, 3]))
+Python: (1, 'a', [2, 3])
+```
+"""
+jl2py(x) = Py(x)
+jl2py(x::Py) = x
+
+function jl2py(x::AbstractDict)
+    d = pydict()
+    for (k, v) in x
+        d[jl2py(k)] = jl2py(v)
+    end
+    return d
+end
+
+function jl2py(x::NamedTuple)
+    d = pydict()
+    for k in keys(x)
+        d[string(k)] = jl2py(x[k])
+    end
+    return d
+end
+
+jl2py(x::Tuple) = pytuple(Tuple(jl2py(el) for el in x))
+jl2py(x::AbstractVector) = pylist(jl2py(el) for el in x)
+# N-D (N ≥ 2) numeric arrays go through the copyless numpy view; vectors are handled
+# element-wise above so a `Vector` of arrays becomes a Python list of numpy arrays.
+jl2py(x::AbstractArray) = jl2numpy(x)

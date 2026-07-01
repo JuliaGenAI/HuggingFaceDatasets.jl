@@ -31,8 +31,9 @@ export DatasetDict
 include("column.jl")
 
 include("transforms.jl")
-export py2jl, 
-    jl2numpy, 
+export py2jl,
+    jl2py,
+    jl2numpy,
     numpy2jl
 
 include("load_dataset.jl")

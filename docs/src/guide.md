@@ -216,6 +216,64 @@ The order of operations when you index is:
 data with the original but has an independent format, so setting a format or transform on
 the copy does not affect the original.
 
+## Transforming with `map` and `filter`
+
+`map` and `filter` are the core `datasets` verbs for building a new dataset from an
+existing one. Both are available in two flavours.
+
+The **forwarded Python methods** `ds.map(...)` / `ds.filter(...)` (see
+[Method forwarding](@ref) above) behave exactly as in Python: the callback receives raw
+`Py` rows or batches and must return Python-compatible values, so you write it in
+"PythonCall dialect" (`pyconvert` on the way in, `pylist`/`pydict` on the way out):
+
+```julia-repl
+julia> ds = Dataset(datasets.Dataset.from_dict(pydict(label=[5, 0, 4])));
+
+julia> ds.map(x -> pydict(label=pylist([pyconvert(Int, l) + 100 for l in x["label"]])),
+              batched=true);          # written against the Python API
+```
+
+The **Julia-friendly overloads** [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridge
+the callback for you: each example (or batch, with `batched=true`) is converted with
+[`py2jl`](@ref) before `f` sees it, and `f`'s Julia return value is converted back to
+Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). You can therefore write a
+pure-Julia transform while still getting `datasets`' batching, caching, and
+multiprocessing:
+
+```julia-repl
+julia> dsj = with_format(ds, "julia");
+
+julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), dsj; batched=true);
+
+julia> ds2[1:3]["label"]
+3-element Vector{Int64}:
+ 105
+ 100
+ 104
+
+julia> ds3 = filter(x -> x["label"] > 2, dsj);   # keep rows with label > 2
+
+julia> ds3[:]["label"]
+2-element Vector{Int64}:
+ 5
+ 4
+```
+
+A few things to note:
+
+- **Batched or not.** Without `batched=true` the callback sees one example at a time (a
+  `Dict` of scalar values, or whatever `py2jl` returns); with `batched=true` it sees a
+  batch (a `Dict` mapping each column to a vector). Return the same shape: a scalar
+  (`map`) / `Bool` (`filter`) per example, or a vector per column / `Vector{Bool}` when
+  batched.
+- **Keyword arguments** such as `batched`, `num_proc`, and `remove_columns` are forwarded
+  to the Python method, so multiprocessing and caching work as usual.
+- **Format is preserved.** The returned `Dataset` inherits the parent's `"julia"` format
+  (or any custom `jltransform`), so `ds2` above is still `"julia"`-formatted and a chained
+  pipeline like `map(f, dsj) |> ...` keeps returning Julia values.
+- **Reach for the Python method** with `ds.map(...)` whenever you specifically want to
+  hand `map`/`filter` a raw Python callback instead.
+
 ## Array and image orientation
 
 !!! warning "Arrays come back transposed"
