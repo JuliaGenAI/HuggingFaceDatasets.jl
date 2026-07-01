@@ -81,7 +81,7 @@ See also [`set_format!`](@ref).
 # Examples
 
 ```julia
-julia> ds = load_dataset("mnist", split="test");
+julia> ds = load_dataset("ylecun/mnist", split="test");
 
 julia> ds[1]
 Python dict: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x2B5B4C1F0>, 'label': 7}

@@ -25,7 +25,7 @@ Check out the [examples/](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/t
 ```julia
 julia> using HuggingFaceDatasets
 
-julia> train_data = load_dataset("mnist", split = "train")
+julia> train_data = load_dataset("ylecun/mnist", split = "train")
 Dataset({
     features: ['image', 'label'],
     num_rows: 60000
@@ -37,7 +37,7 @@ Python: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x
 julia> length(train_data)
 60000
 
-julia> train_data = load_dataset("mnist", split = "train").with_format("julia");
+julia> train_data = load_dataset("ylecun/mnist", split = "train").with_format("julia");
 
 julia> train_data[1] # Returned observations are now julia objects
 Dict{String, Any} with 2 entries:

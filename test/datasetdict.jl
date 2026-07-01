@@ -1,5 +1,5 @@
 
-mnist = load_dataset("mnist")
+mnist = load_dataset("ylecun/mnist")
 
 @test mnist isa DatasetDict
 @test length(mnist) == 2
