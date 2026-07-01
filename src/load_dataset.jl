@@ -17,7 +17,7 @@ to julia types.
 Without a `split` argument, a `DatasetDict` is returned:
 
 ```julia
-julia> d = load_dataset("glue", "sst2")
+julia> d = load_dataset("nyu-mll/glue", "sst2")
 DatasetDict({
     train: Dataset({
         features: ['sentence', 'label', 'idx'],
@@ -44,7 +44,7 @@ Selecting a split returns a `Dataset` instead. We also
 apply the `"julia"` format.
 
 ```julia
-julia> mnist = load_dataset("mnist", split="train").with_format("julia")
+julia> mnist = load_dataset("ylecun/mnist", split="train").with_format("julia")
 Dataset({
     features: ['image', 'label'],
     num_rows: 60000

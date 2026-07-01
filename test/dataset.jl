@@ -1,5 +1,5 @@
-mnist = load_dataset("mnist", split="test")
-glue_ax = load_dataset("glue", "ax", split="test")
+mnist = load_dataset("ylecun/mnist", split="test")
+glue_ax = load_dataset("nyu-mll/glue", "ax", split="test")
 
 @testset "mnist" begin
     @test mnist isa Dataset
