@@ -15,7 +15,7 @@ end
 
 @testset "returned attributes are converted to julia" begin
     @test mnist.format isa Dict # returned attributes are converted to julia
-    @test mnist.format["type"] === nothing
+    @test mnist.format["type"] == "numpy"   # loaded in the "julia" (numpy-backed) format
 end
 
 @testset "firstindex / lastindex / iteration" begin
@@ -30,38 +30,58 @@ end
 end
 
 @testset "construct from Julia data" begin
-    # Dict of scalar vectors round-trips through the julia format
+    # Dict of scalar vectors: the "julia" format is applied by default (no with_format)
     ds = Dataset(Dict("label" => [5, 0, 4]))
     @test ds isa Dataset
     @test length(ds) == 3
+    @test ds.format["type"] == "numpy"                     # julia format by default
     @test collect(keys(pyconvert(Dict, ds.py.features))) == ["label"]
-    @test with_format(ds, "julia")[1:3]["label"] == [5, 0, 4]
+    @test ds[1] == Dict("label" => 5)
+    @test ds[1:3]["label"] == [5, 0, 4]
 
     # NamedTuple path preserves column names and order
     ds = Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))
     @test length(ds) == 3
     @test ds.column_names == ["label", "text"]
-    dsj = with_format(ds, "julia")
-    @test dsj[1:3]["label"] == [5, 0, 4]
-    @test dsj[1:3]["text"] == ["a", "b", "c"]
+    @test ds[1:3]["label"] == [5, 0, 4]
+    @test ds[1:3]["text"] == ["a", "b", "c"]
 
     # mixed scalar types each round-trip
-    ds = with_format(Dataset((
-        i = [1, 2], s = ["x", "y"], f = [1.5, 2.5], b = [true, false])), "julia")
+    ds = Dataset((i = [1, 2], s = ["x", "y"], f = [1.5, 2.5], b = [true, false]))
     @test ds[1:2]["i"] == [1, 2]
     @test ds[1:2]["s"] == ["x", "y"]
     @test ds[1:2]["f"] == [1.5, 2.5]
     @test ds[1:2]["b"] == [true, false]
 
-    # jltransform kwarg is applied
+    # a custom `jltransform` opts out of the default julia format (raw Python format kept)
     ds = Dataset(Dict("label" => [5, 0, 4]); jltransform = py2jl)
+    @test ds.format["type"] === nothing
     @test ds[1] isa Dict
     @test ds[1]["label"] == 5
 
-    # array-valued (multi-dim) columns are rejected loudly, not transposed
-    @test_throws ArgumentError Dataset(Dict("x" => [[1, 2], [3, 4]]))
-    @test_throws ArgumentError Dataset(Dict("x" => [rand(2, 2)]))
-    # non-vector columns are rejected
+    # N-D array columns given as a vector-of-arrays (one array per observation)
+    # round-trip: a single row reads back as the original array and a range stacks them
+    # along the last axis (obs axis last, matching MLUtils / the numpy read path).
+    m1 = [1 2 3; 4 5 6]; m2 = [7 8 9; 10 11 12]  # each 2×3
+    ds = Dataset((; x = [m1, m2]))
+    # inferred schema is a nested `List` (W2), not a fixed-shape `Array2D`
+    @test pyconvert(String, pystr(ds.py.features["x"])) == "List(List(Value('int64')))"
+    @test ds[1]["x"] == m1
+    @test ds[2]["x"] == m2
+    b = ds[1:2]["x"]
+    @test b isa Array{Int, 3}
+    @test size(b) == (2, 3, 2)
+    @test b[:, :, 1] == m1
+    @test b[:, :, 2] == m2
+
+    # N-D array column given as a single stacked `(dims…, N)` array (last axis = obs):
+    # perfectly symmetric with the read path, `Dataset((; x = batch))[:]["x"] == batch`.
+    batch = reshape(collect(1:24), 2, 3, 4)  # 4 observations of 2×3
+    ds = Dataset((; x = batch))
+    @test ds[:]["x"] == batch
+    @test ds[1]["x"] == batch[:, :, 1]
+
+    # non-array columns are rejected
     @test_throws ArgumentError Dataset(Dict("x" => 5))
 end
 
@@ -74,36 +94,44 @@ end
     @test length(split["train"]) + length(split["test"]) == length(mnist)
 end
 
-@testset "indexing, no (jl)transform by default" begin
-    @test_throws BoundsError mnist[0]
-    @test length(mnist[:]["label"]) == 10000
+@testset "raw Python observations via set_format!(ds, nothing)" begin
+    # Passing `nothing` strips all formatting, opting out of the default "julia" format.
+    mnist_raw = set_format!(copy(mnist), nothing)
+    glue_raw = set_format!(copy(glue_ax), nothing)
 
-    x = mnist[1]
+    @test_throws BoundsError mnist_raw[0]
+    @test length(mnist_raw[:]["label"]) == 10000
+
+    x = mnist_raw[1]
     @test @py isinstance(x, dict)
-    @py isinstance(x["image"], PIL.PngImagePlugin.PngImageFile)
+    @test @py isinstance(x["image"], PIL.PngImagePlugin.PngImageFile)
     @test @py x["label"] === 7
 
-    x = mnist[1:2]
+    x = mnist_raw[1:2]
     @test @py isinstance(x, dict)
     @test @py isinstance(x["image"], list)
     @test @py isinstance(x["label"], list)
     @test @py isinstance(x["image"][1], PIL.PngImagePlugin.PngImageFile)
     @test Bool(@py x["label"] == [7, 2])
 
-    x = glue_ax[1]
-    @test Bool(@py x == {"premise": "The cat sat on the mat.", 
-                        "idx": 0, 
-                        "hypothesis": "The cat did not sit on the mat.", 
+    x = glue_raw[1]
+    @test Bool(@py x == {"premise": "The cat sat on the mat.",
+                        "idx": 0,
+                        "hypothesis": "The cat did not sit on the mat.",
                         "label": -1})
 
-    x = glue_ax[1:2]
+    x = glue_raw[1:2]
     @test @py isinstance(x["premise"], list)
     @test length(x["premise"]) == 2
+
+    # the originals are untouched by the copy-on-write reset
+    @test mnist.format["type"] == "numpy"
+    @test glue_ax.format["type"] == "numpy"
 end
 
 @testset "with_format(julia) - mnist" begin
     ds = with_format(mnist, "julia")
-    @test ds.format["type"] === nothing
+    @test ds.format["type"] == "numpy"  # the julia format is numpy + py2jl under the hood
 
     # `ds[column]` returns a lazy `Column` view, not a materialized vector
     col = ds["label"]
@@ -116,24 +144,26 @@ end
     @test collect(col) isa Vector{Int}
     @test length(collect(col)) == 10000
 
+    # under the numpy format an Image feature decodes to a real array (no PIL round-trip),
+    # so a single row is an `(H, W)` matrix and a range stacks into an `(H, W, N)` tensor
     x = ds[1]
     @test x isa Dict
     @test x["label"] == 7
-    @test x["image"] isa AbstractMatrix{Gray{N0f8}}
+    @test x["image"] isa AbstractMatrix{UInt8}
     @test size(x["image"]) == (28, 28)
 
     x = ds[1:2]
     @test x isa Dict
     @test x["label"] isa Vector{Int}
     @test x["label"] == [7, 2]
-    @test x["image"] isa Vector
-    @test length(x["image"]) == 2
-    @test size(x["image"][1]) == (28, 28)
+    @test x["image"] isa AbstractArray{UInt8, 3}
+    @test size(x["image"]) == (28, 28, 2)
+    @test x["image"][:, :, 1] == ds[1]["image"]
 end
 
 @testset "with_format(julia) - glue_ax" begin
     ds = with_format(glue_ax, "julia")
-    @test ds.format["type"] === nothing
+    @test ds.format["type"] == "numpy"
 
     x = ds[1]
     @test x isa Dict
@@ -179,19 +209,23 @@ end
     @test ds[1:2] == [-8, -3]
 end
 
-@testset "reset_format!" begin
-    ds = with_format(mnist, "julia")
-    @test ds.format["type"] === nothing
-    reset_format!(ds)
+@testset "reset_format! restores the default julia format" begin
+    ds = set_format!(copy(mnist), nothing)    # start from raw Python
     @test ds.format["type"] === nothing
     @test @py isinstance(ds[1], dict)
+    reset_format!(ds)                          # reset -> default "julia" format
+    @test ds.format["type"] == "numpy"
+    @test ds[1] isa Dict
+    @test ds[1]["label"] == 7
 end
 
 @testset "set_format" begin
     ds = deepcopy(mnist)
+    set_format!(ds, nothing)
+    @test ds.format["type"] === nothing         # the copy is stripped ...
+    @test mnist.format["type"] == "numpy"        # ... the original julia format is intact
     ds.set_format("numpy")
     @test ds.format["type"] == "numpy"
-    @test mnist.format["type"] === nothing
     set_format!(ds, nothing)
     @test ds.format["type"] === nothing
 end
@@ -199,7 +233,7 @@ end
 @testset "jltransform always acts on batches" begin
     ds = with_jltransform(mnist) do x
         x = py2jl(x)
-        @test x["image"] isa Vector # batch
+        @test x["label"] isa Vector # batch, even when indexing with a single integer
         return x
     end
     ds[1]

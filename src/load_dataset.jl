@@ -9,8 +9,9 @@ See the documentation [here](https://huggingface.co/docs/datasets/package_refere
 
 Returns a [`DatasetDict`](@ref) or a [`Dataset`](@ref) depending on the `split` argument.
 
-Use the `dataset.with_format("julia")` method to lazily convert the observation from the dataset 
-to julia types.
+The result is returned in the `"julia"` format, so observations are lazily converted to
+native Julia types on access (see [`with_format`](@ref)). Use `set_format!(ds, nothing)`
+(or the underlying `.py` object) if you want the raw Python observations instead.
 
 # Examples
 
@@ -40,28 +41,30 @@ Dataset({
 })
 ```
 
-Selecting a split returns a `Dataset` instead. We also
-apply the `"julia"` format.
+Selecting a split returns a `Dataset` instead. Observations come back as native Julia
+values thanks to the default `"julia"` format:
 
 ```julia
-julia> mnist = load_dataset("ylecun/mnist", split="train").with_format("julia")
+julia> mnist = load_dataset("ylecun/mnist", split="train")
 Dataset({
     features: ['image', 'label'],
     num_rows: 60000
 })
 
-julia> mnist[1]
-Dict{String, Any} with 2 entries:
-  "label" => 5
-  "image" => Gray{N0f8}[Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f8}(0.0) Gray{N0f8}(0.0); Gray{N0f8}(0.0) Gray{N0f8}(0.0) … Gray{N0f…
+julia> mnist[1]["label"]
+5
+
+julia> mnist[1]["image"]        # a raw (W, H) numeric array under the numpy-backed format
+28×28 Matrix{UInt8}:
+[...]
 ```
 """
 function load_dataset(args...; kws...)
     d = datasets.load_dataset(args...; kws...)
     if pyisinstance(d, datasets.Dataset)
-        return Dataset(d)
+        return set_format!(Dataset(d), "julia")
     elseif pyisinstance(d, datasets.DatasetDict)
-        return DatasetDict(d)
+        return set_format!(DatasetDict(d), "julia")
     else
         return d
     end

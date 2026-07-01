@@ -4,12 +4,12 @@ using Flux.Losses: logitcrossentropy
 using Flux: onecold
 using HuggingFaceDatasets
 using MLUtils
-using ImageCore
 # using ProfileView, BenchmarkTools
 
 function mnist_transform(batch)
-    image = ImageCore.channelview.(batch["image"]) # from Matrix{Gray{N0f8}} to Matrix{UInt8}
-    image = Flux.batch(image) ./ 255f0
+    # under the "julia" (= numpy) format the image column is already a stacked
+    # (W, H, N) UInt8 array, so just rescale to Float32 in [0, 1]
+    image = Float32.(batch["image"]) ./ 255f0
     label = Flux.onehotbatch(batch["label"], 0:9)
     return (; image, label)
 end

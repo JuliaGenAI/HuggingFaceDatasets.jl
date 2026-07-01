@@ -7,10 +7,13 @@ Provides:
 - 1-based indexing.
 - All python class' methods from  `datasets.Dataset`.
 
-Usually constructed via [`load_dataset`](@ref), but any `datasets.Dataset` object can
-be wrapped directly.
+Usually constructed via [`load_dataset`](@ref) or from in-memory Julia data (see below),
+both of which default to the `"julia"` format so observations are converted to native Julia
+types on access. A raw `datasets.Dataset` object can also be wrapped directly, in which case
+its current Python format is preserved (use [`with_format`](@ref) to opt in to `"julia"`).
 
-See also [`load_dataset`](@ref), [`DatasetDict`](@ref), and [`with_format`](@ref).
+See also [`load_dataset`](@ref), [`DatasetDict`](@ref), [`with_format`](@ref), and
+[`reset_format!`](@ref).
 
 # Examples
 
@@ -24,21 +27,18 @@ Dataset({
 julia> length(ds)
 3
 
-julia> ds[1]      # a single observation, as a Python object
-Python: {'label': 5}
-
-julia> ds[end]
-Python: {'label': 4}
-
-julia> ds = with_format(ds, "julia");   # convert observations to Julia types
-
-julia> ds[1]
+julia> ds[1]      # observations are Julia values by default (the "julia" format)
 Dict{String, Int64} with 1 entry:
   "label" => 5
 
 julia> ds[1:3]    # a range or vector returns a batch (columns -> vectors)
 Dict{String, Vector{Int64}} with 1 entry:
   "label" => [5, 0, 4]
+
+julia> set_format!(ds, nothing);   # opt out: hand back the raw Python observations
+
+julia> ds[1]
+Python: {'label': 5}
 ```
 """
 mutable struct Dataset
@@ -54,18 +54,28 @@ mutable struct Dataset
 end
 
 """
-    Dataset(d::AbstractDict; jltransform = identity)
-    Dataset(nt::NamedTuple; jltransform = identity)
+    Dataset(d::AbstractDict; jltransform = nothing)
+    Dataset(nt::NamedTuple; jltransform = nothing)
 
 Build a `Dataset` from in-memory Julia data: a `Dict` or `NamedTuple` mapping column
-names to equal-length vectors, delegating to `datasets.Dataset.from_dict`.
+names to columns, delegating to `datasets.Dataset.from_dict`.
 
-Only **scalar-element** columns are supported for now (numbers, strings, booleans, ...).
-Array-valued columns (e.g. a `Vector{Matrix}` image column) are rejected with an
-`ArgumentError` rather than silently transposed, since Julia is column-major while Arrow
-and numpy are row-major. Build those with `datasets.Dataset.from_dict` directly for now.
+Each column is either
 
-See also [`with_format`](@ref) and [`jl2py`](@ref).
+- a vector of scalars (numbers, strings, booleans, ...), or
+- an **N-D array** column, given either as a vector-of-arrays (one array per observation,
+  e.g. a `Vector{Matrix}` image column) or as a single stacked `(dims…, N)` array whose
+  **last axis** indexes the `N` observations (the MLUtils convention).
+
+Array columns are converted with [`jl2numpy`](@ref), so the column-major/row-major axis
+reversal is handled and round-trips: a single row reads back as the original Julia array
+and a range index stacks rows into a `(dims…, N)` tensor.
+
+The dataset is returned in the `"julia"` format by default (observations converted to
+native Julia types on access). Pass a `jltransform` to install a custom transform instead,
+or call [`reset_format!`](@ref) for the raw Python observations.
+
+See also [`with_format`](@ref), [`jl2py`](@ref), and [`jl2numpy`](@ref).
 
 # Examples
 
@@ -76,38 +86,65 @@ Dataset({
     num_rows: 3
 })
 
-julia> with_format(ds, "julia")[1:3]["label"]
+julia> ds[1:3]["label"]
 3-element Vector{Int64}:
  5
  0
  4
+
+julia> ds = Dataset((; x = [1 2 3; 4 5 6]));   # a 2×3 matrix column: 3 observations
+
+julia> ds[1]["x"]           # observation 1 is the first column of the input
+2-element Vector{Int64}:
+ 1
+ 4
+
+julia> ds[1:3]["x"]         # a range stacks observations along the last axis
+2×3 Matrix{Int64}:
+ 1  2  3
+ 4  5  6
 ```
 """
-Dataset(d::AbstractDict; jltransform = identity) =
-    Dataset(datasets.Dataset.from_dict(_from_dict_pydict(d)), jltransform)
+Dataset(d::AbstractDict; jltransform = nothing) =
+    _from_julia_data(_from_dict_pydict(d), jltransform)
 
-Dataset(nt::NamedTuple; jltransform = identity) =
-    Dataset(datasets.Dataset.from_dict(_from_dict_pydict(nt)), jltransform)
+Dataset(nt::NamedTuple; jltransform = nothing) =
+    _from_julia_data(_from_dict_pydict(nt), jltransform)
 
-# Convert a Julia column mapping (Dict/NamedTuple of vectors) into a Python dict suitable
-# for `datasets.Dataset.from_dict`, rejecting array-valued (multi-dimensional) columns.
+# Wrap a freshly built `datasets.Dataset` from Julia data. With no explicit `jltransform`
+# the dataset defaults to the `"julia"` format; passing a transform installs it instead
+# (leaving the Python format untouched, i.e. observations arrive as raw Python batches).
+function _from_julia_data(py::Py, jltransform)
+    ds = Dataset(datasets.Dataset.from_dict(py))
+    return jltransform === nothing ? set_format!(ds, "julia") : set_jltransform!(ds, jltransform)
+end
+
+# Convert a Julia column mapping (Dict/NamedTuple) into a Python dict suitable for
+# `datasets.Dataset.from_dict`.
 function _from_dict_pydict(d)
     py = pydict()
     for (k, v) in pairs(d)
-        v isa AbstractVector || throw(ArgumentError(
-            "column \"$k\" must be an AbstractVector of scalars, got $(typeof(v))"))
-        et = eltype(v)
-        if et <: AbstractArray || (!isconcretetype(et) && any(x -> x isa AbstractArray, v))
-            throw(ArgumentError(
-                "column \"$k\" has array-valued elements; constructing a Dataset from " *
-                "multi-dimensional columns is not yet supported (elements would be " *
-                "silently transposed). Build it with `datasets.Dataset.from_dict` " *
-                "directly for now."))
-        end
-        py[string(k)] = jl2py(v)   # scalar vector -> python list
+        py[string(k)] = _column_to_py(string(k), v)
     end
     return py
 end
+
+# A column given as a vector: each element is one observation. `jl2py` maps a scalar
+# vector to a Python list, and a vector-of-arrays to a Python list of (axis-reversed)
+# numpy arrays, which `from_dict` infers as `List(List(...))`.
+_column_to_py(k::AbstractString, v::AbstractVector) = jl2py(v)
+
+# A column given as a single stacked N-D array: the LAST axis indexes observations (the
+# MLUtils convention, matching what the numpy read path stacks into), so split along it
+# into per-observation arrays before handing off to `jl2py`.
+function _column_to_py(k::AbstractString, v::AbstractArray)
+    n = size(v, ndims(v))
+    obs = [copy(selectdim(v, ndims(v), i)) for i in 1:n]
+    return jl2py(obs)
+end
+
+_column_to_py(k::AbstractString, v) = throw(ArgumentError(
+    "column \"$k\" must be an AbstractArray of observations, got $(typeof(v))"))
 
 function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
@@ -234,16 +271,17 @@ Base.show(io::IO, ds::Dataset) = print(io, ds.py)
     with_format(ds::Dataset, format)
 
 Return a copy of `ds` with the format set to `format`.
-If format is `"julia"`, the returned dataset will be transformed
-with [`py2jl`](@ref) and copyless conversion from python types 
-will be used when possible.
+If format is `"julia"`, the returned dataset is backed by `datasets`' `numpy` format and
+transformed with [`py2jl`](@ref), using copyless conversion from python types when possible.
+Any other string is forwarded to `datasets`' own `set_format` (`"numpy"`, `"torch"`, ...),
+with observations left as raw Python objects.
 
-See also [`set_format!`](@ref).
+See also [`set_format!`](@ref) and [`reset_format!`](@ref).
 
 # Examples
 
 ```jldoctest
-julia> ds = Dataset((; label=[5, 0, 4]));
+julia> ds = set_format!(Dataset((; label=[5, 0, 4])), nothing);   # start from raw Python
 
 julia> ds[1]
 Python: {'label': 5}
@@ -263,12 +301,19 @@ end
 """
     set_format!(ds::Dataset, format)
 
-Set the format of `ds` to `format`. Mutating
-version of [`with_format`](@ref).
+Set the format of `ds` to `format`. Mutating version of [`with_format`](@ref).
+
+`format == "julia"` installs the julia format (numpy-backed + [`py2jl`](@ref)); `nothing`
+removes all formatting (raw Python observations); any other string is forwarded to
+`datasets`' `set_format` (`"numpy"`, `"torch"`, ...). The single-argument form
+`set_format!(ds)` restores the default julia format (see [`reset_format!`](@ref)).
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        ds.py.reset_format() # or ds.py.set_format("python")
+        # Use the numpy format so numeric array columns decode as real N-D arrays and a
+        # range index stacks rows into an `(N, dims…)` tensor; `py2jl` (via DLPack) then
+        # reverses the axes to a Julia `(dims…, N)` array with the observation axis last.
+        ds.py.set_format("numpy")
         ds.jltransform = py2jl
     else
         ds.py.set_format(format)
@@ -279,11 +324,13 @@ end
 
 set_format!(ds::Dataset) = reset_format!(ds)
 
-function reset_format!(ds::Dataset)
-    ds.py.set_format(nothing)
-    ds.jltransform = identity
-    return ds
-end
+"""
+    reset_format!(ds::Dataset)
+
+Reset `ds` to the default `"julia"` format, i.e. `set_format!(ds, "julia")`. To instead
+strip all formatting and get the raw Python observations, use `set_format!(ds, nothing)`.
+"""
+reset_format!(ds::Dataset) = set_format!(ds, "julia")
 
 """
     with_jltransform(ds::Dataset, transform)

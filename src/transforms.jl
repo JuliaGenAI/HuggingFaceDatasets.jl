@@ -25,6 +25,10 @@ julia> py2jl(pytuple((1, pylist([2, 3]))))
 """
 py2jl(x) = pyconvert(Any, x)
 
+# Whether a numpy array's dtype is one DLPack (and hence `numpy2jl`) can share: bool,
+# signed/unsigned integer, float, or complex. Strings/objects/datetimes are excluded.
+_is_dlpack_numeric(x::Py) = pyconvert(String, x.dtype.kind) in ("b", "i", "u", "f", "c")
+
 function py2jl(x::Py)
     # handle datasets
     if pyisinstance(x, datasets.Dataset)
@@ -45,9 +49,20 @@ function py2jl(x::Py)
         return Dict(py2jl(k) => py2jl(v) for (k, v) in x.items())
     elseif pyisinstance(x, pytype(pyset()))
         return Set(py2jl(x) for x in x)
-    # handle numpy arrays   
+    # handle numpy arrays
     elseif pyisinstance(x, np.ndarray)
-        return numpy2jl(x)
+        # DLPack (`numpy2jl`) only supports numeric dtypes. Non-numeric arrays (strings,
+        # `object` arrays from ragged columns, datetimes, ...) fall back to a nested-list
+        # conversion, so a string column still comes back as a `Vector{String}`.
+        if _is_dlpack_numeric(x)
+            return numpy2jl(x)
+        else
+            return py2jl(x.tolist())
+        end
+    # handle numpy scalars (`np.int64`, `np.float32`, `np.str_`, `np.bool_`, ...), which
+    # the numpy format yields for single cells; `.item()` gives the native Python scalar.
+    elseif pyisinstance(x, np.generic)
+        return py2jl(x.item())
     # handle PIL images (any subclass: PNG/JPEG/BMP/GIF/TIFF/... and transform outputs)
     elseif pyisinstance(x, PIL.Image.Image)
         a = numpy2jl(np.array(x))
@@ -88,6 +103,13 @@ julia> numpy2jl(y)                      # back to a 2×3 Julia array
 ```
 """
 function numpy2jl(x::Py)
+    # DLPack cannot import a read-only numpy buffer (numpy >= 2.1 signals read-only, which
+    # this DLPack version does not support), and the numpy format hands back read-only
+    # arrays for some columns. Copy to a writable array first in that case; the copy is
+    # C-contiguous, so `from_dlpack` still reverses the axes and the orientation is correct.
+    if !pyconvert(Bool, x.flags.writeable)
+        x = x.copy()
+    end
     return DLPack.from_dlpack(x)
 end
 

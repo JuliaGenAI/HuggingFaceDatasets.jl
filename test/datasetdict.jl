@@ -31,27 +31,28 @@ end
     @test s == sprint(show, mnist)   # same as the 2-arg show
 end
 
-@testset "indexing, no (jl)transform by default" begin
+@testset "raw Python observations via set_format!(d, nothing)" begin
     @test_throws MethodError mnist[1]
     @test mnist["test"] isa Dataset
-    ds = mnist["test"]
+    ds = set_format!(copy(mnist), nothing)["test"]   # strip formatting -> raw python
     @test pyisinstance(ds[1], pytype(pydict()))
     @test ds[1]["image"] isa Py
     @test ds[1]["label"] isa Py
     @test pyisinstance(ds[1]["label"], pytype(pyint()))
     @test py2jl(ds[1]["label"]) == 7
     @test py2jl(ds[2]["label"]) == 2
+    @test mnist["test"].format["type"] == "numpy"   # original untouched
 end
 
 @testset "with_format(julia)" begin
     d = with_format(mnist, "julia")
     ds = d["test"]
-    @test ds.format["type"] == nothing
+    @test ds.format["type"] == "numpy"
     x = ds[1]
     @test x isa Dict
     @test x["label"] isa Int
     @test x["label"] == 7
-    @test x["image"] isa AbstractMatrix{<:Gray}
+    @test x["image"] isa AbstractMatrix{UInt8}   # numpy format: raw array, not a colorview
     @test size(x["image"]) == (28, 28)
 end
 
@@ -72,23 +73,27 @@ end
 
 @testset "set_format" begin
     d = deepcopy(mnist)
+    set_format!(d, nothing)
+    @test d["test"].format["type"] === nothing              # the copy is stripped ...
+    @test mnist["test"].format["type"] == "numpy"           # ... original julia intact
     d.set_format("numpy")
     @test d["test"].format["type"] == "numpy"
-    @test mnist["test"].format["type"] === nothing
     set_format!(d, nothing)
     @test d["test"].format["type"] === nothing
 end
 
 @testset "reset_format! / set_format! (DatasetDict)" begin
-    d = with_format(mnist, "julia")
-    @test d["test"][1] isa Dict                              # julia format active
-    reset_format!(d)
-    @test pyisinstance(d["test"][1], pytype(pydict()))       # back to raw python
-    set_format!(d, "numpy")
-    @test d["test"].format["type"] == "numpy"
-    set_format!(d)                                           # single-arg form resets
+    d = set_format!(copy(mnist), nothing)                   # raw python
+    @test pyisinstance(d["test"][1], pytype(pydict()))
     @test d["test"].format["type"] === nothing
-    @test mnist["test"].format["type"] === nothing          # original untouched
+    reset_format!(d)                                        # reset -> default julia
+    @test d["test"][1] isa Dict
+    @test d["test"].format["type"] == "numpy"
+    set_format!(d, nothing)                                 # explicit nothing -> raw
+    @test d["test"].format["type"] === nothing
+    set_format!(d)                                          # single-arg form -> julia
+    @test d["test"].format["type"] == "numpy"
+    @test mnist["test"].format["type"] == "numpy"           # original untouched
 end
 
 @testset "merge / filter preserve the wrapper type" begin

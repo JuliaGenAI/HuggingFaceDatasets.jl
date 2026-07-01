@@ -17,9 +17,7 @@ of a julia-formatted [`Dataset`], e.g. `ds["label"]`.
 # Examples
 
 ```jldoctest
-julia> ds = Dataset((; label=[5, 0, 4]));
-
-julia> ds = with_format(ds, "julia");
+julia> ds = Dataset((; label=[5, 0, 4]));   # "julia" format by default
 
 julia> col = ds["label"]
 3-element HuggingFaceDatasets.Column{Int64}:
