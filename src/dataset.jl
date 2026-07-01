@@ -63,7 +63,7 @@ end
 
 function Base.deepcopy_internal(ds::Dataset, stackdict::IdDict)
     haskey(stackdict, ds) && return stackdict[ds]::Dataset
-    pyds = copy.deepcopy(getfield(ds, :pyds))
+    pyds = pycopy.deepcopy(getfield(ds, :pyds))
     jltransform = Base.deepcopy_internal(getfield(ds, :jltransform), stackdict)
     ds2 = Dataset(pyds, jltransform)
     stackdict[ds] = ds2
@@ -74,7 +74,7 @@ end
 # but has an independent format, so `set_format!`/`set_jltransform!` on the copy
 # do not affect the original. Used internally by the copy-on-write helpers.
 function Base.copy(ds::Dataset)
-    pyds = copy.copy(getfield(ds, :pyds))
+    pyds = pycopy.copy(getfield(ds, :pyds))
     return Dataset(pyds, getfield(ds, :jltransform))
 end
 
@@ -107,7 +107,7 @@ Dict{String, Any} with 2 entries:
 ```
 """
 function with_format(ds::Dataset, format::AbstractString)
-    ds = Base.copy(ds)
+    ds = copy(ds)
     return set_format!(ds, format)
 end
 
@@ -154,7 +154,7 @@ If `transform` is `nothing` or `identity`, the returned dataset will not be tran
 See also [`set_jltransform!`](@ref) for the mutating version.
 """
 function with_jltransform(ds::Dataset, transform)
-    ds = Base.copy(ds)
+    ds = copy(ds)
     return set_jltransform!(ds, transform)
 end
 

@@ -44,7 +44,7 @@ end
 
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
     haskey(stackdict, d) && return stackdict[d]::DatasetDict
-    pyd = copy.deepcopy(getfield(d, :pyd))
+    pyd = pycopy.deepcopy(getfield(d, :pyd))
     jltransform = Base.deepcopy_internal(getfield(d, :jltransform), stackdict)
     d2 = DatasetDict(pyd, jltransform)
     stackdict[d] = d2
@@ -55,7 +55,7 @@ end
 # but has an independent format, so `set_format!`/`set_jltransform!` on the copy
 # do not affect the original. Used internally by the copy-on-write helpers.
 function Base.copy(d::DatasetDict)
-    pyd = copy.copy(getfield(d, :pyd))
+    pyd = pycopy.copy(getfield(d, :pyd))
     return DatasetDict(pyd, getfield(d, :jltransform))
 end
 
@@ -68,7 +68,7 @@ Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
 Return a copy of `d` with the julia `transform` applied to each [`Dataset`](@ref).
 """
 function with_jltransform(d::DatasetDict, transform)
-    d = Base.copy(d)
+    d = copy(d)
     set_jltransform!(d, transform)
     return d
 end
@@ -102,7 +102,7 @@ with [`py2jl`](@ref) and copyless conversion from python types
 will be used when possible.
 """
 function with_format(d::DatasetDict, format)
-    d = Base.copy(d)
+    d = copy(d)
     return set_format!(d, format)
 end
 

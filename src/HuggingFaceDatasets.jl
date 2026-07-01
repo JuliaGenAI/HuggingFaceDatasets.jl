@@ -9,7 +9,7 @@ using ImageCore
 const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()
 const np = PythonCall.pynew()
-const copy = PythonCall.pynew()
+const pycopy = PythonCall.pynew() # the python `copy` module (renamed to avoid shadowing `Base.copy`)
 
 export datasets
 
@@ -44,7 +44,7 @@ function __init__()
     pyimport("PIL.PngImagePlugin")
     pyimport("PIL.JpegImagePlugin")
     PythonCall.pycopy!(np, pyimport("numpy"))
-    PythonCall.pycopy!(copy, pyimport("copy"))
+    PythonCall.pycopy!(pycopy, pyimport("copy"))
 end
 
 end # module
