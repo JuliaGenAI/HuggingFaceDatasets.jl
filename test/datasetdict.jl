@@ -91,6 +91,30 @@ end
     @test mnist["test"].format["type"] === nothing          # original untouched
 end
 
+@testset "merge / filter preserve the wrapper type" begin
+    # `merge`/`filter` must return a `DatasetDict`, not a plain `Dict{String,Dataset}`.
+    f = filter(p -> p.first == "train", mnist)
+    @test f isa DatasetDict
+    @test collect(keys(f)) == ["train"]
+
+    extra = load_dataset("ylecun/mnist")["test"]   # a lone `Dataset`
+    m = merge(mnist, Dict("extra" => extra))
+    @test m isa DatasetDict
+    @test Set(keys(m)) == Set(["train", "test", "extra"])
+
+    # later dicts win, matching `Base.merge` semantics
+    m2 = merge(mnist, Dict("train" => extra))
+    @test m2 isa DatasetDict
+    @test length(m2["train"]) == length(extra)
+
+    # the `jltransform` of the first argument is carried over
+    dj = with_format(mnist, "julia")
+    fj = filter(p -> p.first == "test", dj)
+    @test fj isa DatasetDict
+    @test fj["test"][1] isa Dict
+    @test fj["test"][1]["label"] isa Int
+end
+
 @testset "set_jltransform!" begin
     d = deepcopy(mnist)
     set_jltransform!(d) do x
