@@ -4,6 +4,24 @@ mnist = load_dataset("ylecun/mnist")
 @test mnist isa DatasetDict
 @test length(mnist) == 2
 
+@testset "dictionary interface" begin
+    @test DatasetDict <: AbstractDict{String, Dataset}
+    @test eltype(mnist) == Pair{String, Dataset}
+    @test keytype(mnist) == String
+    @test valtype(mnist) == Dataset
+    @test Set(keys(mnist)) == Set(["train", "test"])
+    @test keys(mnist) isa Vector{String}
+    @test all(v -> v isa Dataset, values(mnist))
+    @test length(values(mnist)) == 2
+    @test Set(first.(pairs(mnist))) == Set(["train", "test"])
+    @test all(p -> p.second isa Dataset, pairs(mnist))
+    @test haskey(mnist, "train")
+    @test !haskey(mnist, "nonexistent")
+    @test get(mnist, "train", nothing) isa Dataset
+    @test get(mnist, "nonexistent", nothing) === nothing
+    @test Set(k for (k, v) in mnist) == Set(["train", "test"])
+end
+
 @testset "indexing, no (jl)transform by default" begin
     @test_throws MethodError mnist[1]
     @test mnist["test"] isa Dataset
