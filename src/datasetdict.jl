@@ -42,9 +42,21 @@ function Base.getindex(d::DatasetDict, i::AbstractString)
     return Dataset(x, d.jltransform)
 end
 
-function Base.deepcopy(d::DatasetDict)
-    pyd = copy.deepcopy(d.pyd)
-    return DatasetDict(pyd, d.jltransform)
+function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
+    haskey(stackdict, d) && return stackdict[d]::DatasetDict
+    pyd = copy.deepcopy(getfield(d, :pyd))
+    jltransform = Base.deepcopy_internal(getfield(d, :jltransform), stackdict)
+    d2 = DatasetDict(pyd, jltransform)
+    stackdict[d] = d2
+    return d2
+end
+
+# Shallow copy: the returned dict shares the underlying Arrow data with `d`
+# but has an independent format, so `set_format!`/`set_jltransform!` on the copy
+# do not affect the original. Used internally by the copy-on-write helpers.
+function Base.copy(d::DatasetDict)
+    pyd = copy.copy(getfield(d, :pyd))
+    return DatasetDict(pyd, getfield(d, :jltransform))
 end
 
 Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
@@ -56,7 +68,7 @@ Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
 Return a copy of `d` with the julia `transform` applied to each [`Dataset`](@ref).
 """
 function with_jltransform(d::DatasetDict, transform)
-    d = deepcopy(d)
+    d = Base.copy(d)
     set_jltransform!(d, transform)
     return d
 end
@@ -90,7 +102,7 @@ with [`py2jl`](@ref) and copyless conversion from python types
 will be used when possible.
 """
 function with_format(d::DatasetDict, format)
-    d = deepcopy(d)
+    d = Base.copy(d)
     return set_format!(d, format)
 end
 
