@@ -93,6 +93,26 @@ Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
 
 Base.get(d::DatasetDict, k::AbstractString, default) = haskey(d, k) ? d[k] : default
 
+# The generic `AbstractDict` `merge`/`filter` build the result with `empty(d)`, which
+# returns a plain `Dict` and drops the wrapper. Override them to return a `DatasetDict`
+# backed by a fresh `datasets.DatasetDict`, preserving `d`'s `jltransform`.
+_pyds(v::Dataset) = getfield(v, :pyds)
+_pyds(v::Py) = v
+
+function _wrap_pairs(itr, jltransform)
+    pyd = datasets.DatasetDict()
+    for (k, v) in itr
+        pyd[String(k)] = _pyds(v)
+    end
+    return DatasetDict(pyd, jltransform)
+end
+
+Base.filter(f, d::DatasetDict) = _wrap_pairs(Iterators.filter(f, pairs(d)), d.jltransform)
+
+function Base.merge(d::DatasetDict, others::AbstractDict...)
+    return _wrap_pairs(Iterators.flatten((pairs(d), map(pairs, others)...)), d.jltransform)
+end
+
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
     haskey(stackdict, d) && return stackdict[d]::DatasetDict
     pyd = pycopy.deepcopy(getfield(d, :pyd))
