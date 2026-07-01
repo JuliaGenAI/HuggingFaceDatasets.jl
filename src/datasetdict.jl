@@ -1,10 +1,10 @@
 """
-    DatasetDict(pydatasetdict::Py; transform = identity)
+    DatasetDict(pyd::Py, jltransform = identity)
 
-A `DatasetDict` is a dictionary of `Dataset`s. 
+A `DatasetDict` is a dictionary of `Dataset`s.
 It is a wrapper around a `datasets.DatasetDict` object.
 
-The `transform` is applied to each [`Dataset`](@ref). 
+The `jltransform` is applied to each [`Dataset`](@ref).
 The [`py2jl`](@ref) transform provided by this package
 converts python types to julia types.
 
@@ -15,7 +15,9 @@ mutable struct DatasetDict <: AbstractDict{String, Dataset}
     jltransform
 
     function DatasetDict(pydatasetdict::Py, jltransform = identity)
-        @assert pyisinstance(pydatasetdict, datasets.DatasetDict)
+        if !pyisinstance(pydatasetdict, datasets.DatasetDict)
+            throw(ArgumentError("expected a `datasets.DatasetDict`, got $(pytype(pydatasetdict))"))
+        end
         return new(pydatasetdict, jltransform)
     end
 end
@@ -73,7 +75,7 @@ end
 
 Base.show(io::IO, ds::DatasetDict) = print(io, ds.pyd)
 
-""""
+"""
     with_jltransform(d::DatasetDict, transform)
     with_jltransform(transform, d::DatasetDict)
 
@@ -132,5 +134,18 @@ function set_format!(d::DatasetDict, format)
         d.pyd.set_format(format)
         d.jltransform = identity
     end
+    return d
+end
+
+set_format!(d::DatasetDict) = reset_format!(d)
+
+"""
+    reset_format!(d::DatasetDict)
+
+Reset the format of `d`, removing any python format and julia transform.
+"""
+function reset_format!(d::DatasetDict)
+    d.pyd.set_format(nothing)
+    d.jltransform = identity
     return d
 end

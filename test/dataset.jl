@@ -18,8 +18,28 @@ end
     @test mnist.format["type"] === nothing
 end
 
+@testset "firstindex / lastindex / iteration" begin
+    ds = Dataset(HuggingFaceDatasets.datasets.Dataset.from_dict(
+        pydict(Dict("x" => pylist([10, 20, 30])))))
+    @test firstindex(ds) == 1
+    @test lastindex(ds) == 3
+    @test pyconvert(Int, ds[end]["x"]) == 30
+    @test pyconvert(Int, ds[begin]["x"]) == 10
+    @test [pyconvert(Int, o["x"]) for o in ds] == [10, 20, 30]   # iterates observations
+    @test length(collect(ds)) == 3
+end
+
+@testset "keyword arguments are forwarded to python methods" begin
+    # `train_test_split` requires the `test_size` keyword: regression test for the
+    # kwargs-forwarding bug where keywords were splatted as positional arguments.
+    split = mnist.train_test_split(test_size=0.2)
+    @test split isa DatasetDict
+    @test Set(keys(split)) == Set(["train", "test"])
+    @test length(split["train"]) + length(split["test"]) == length(mnist)
+end
+
 @testset "indexing, no (jl)transform by default" begin
-    @test_throws AssertionError mnist[0]
+    @test_throws BoundsError mnist[0]
     @test length(mnist[:]["label"]) == 10000
 
     x = mnist[1]

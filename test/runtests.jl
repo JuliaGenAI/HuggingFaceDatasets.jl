@@ -4,6 +4,10 @@ using HuggingFaceDatasets, PythonCall, ImageCore
 PIL = HuggingFaceDatasets.PIL
 np = HuggingFaceDatasets.np
 
+@testset "transforms" begin
+    include("transforms.jl")
+end
+
 @testset "dataset" begin
     include("dataset.jl")
 end

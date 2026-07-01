@@ -8,6 +8,6 @@ function MLUtils.getobs(py::Py, i::Integer)
     elseif pyisinstance(py, np.ndarray)
         return py[i-1]
     else
-        return error("Py type $(pytype(py)) non supported yet")
+        return error("Py type $(pytype(py)) not supported yet")
     end
 end

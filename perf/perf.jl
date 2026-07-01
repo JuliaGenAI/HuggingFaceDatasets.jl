@@ -18,7 +18,7 @@ end
 
 function bench()
     mld = MNIST(split=:test)
-    ds_plain = load_dataset("mnist", split="test")
+    ds_plain = load_dataset("ylecun/mnist", split="test")
     ds_julia = with_format(ds_plain, "julia")
     ds_numpy = with_format(ds_plain, "numpy")
     ds_jnumpy = with_jltransform(py2jl, ds_numpy) # numpy + py2jl

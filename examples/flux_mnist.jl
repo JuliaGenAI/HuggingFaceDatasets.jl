@@ -33,8 +33,8 @@ function train(epochs)
     nhidden = 100
     device = cpu
 
-    train_data = load_dataset("mnist", split="train").with_format("julia")
-    test_data = load_dataset("mnist", split="test").with_format("julia")
+    train_data = load_dataset("ylecun/mnist", split="train").with_format("julia")
+    test_data = load_dataset("ylecun/mnist", split="test").with_format("julia")
     train_data = mapobs(mnist_transform, train_data)[:] # lazy apply transform then materialize
     test_data = mapobs(mnist_transform, test_data)[:]
     
