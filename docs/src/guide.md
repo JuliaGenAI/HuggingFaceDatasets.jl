@@ -254,8 +254,9 @@ julia> ds2[1:3]["label"]
 julia> ds3 = filter(x -> x["label"] > 2, dsj);   # keep rows with label > 2
 
 julia> ds3[:]["label"]
-1-element Vector{Int64}:
+2-element Vector{Int64}:
  5
+ 4
 ```
 
 A few things to note:
