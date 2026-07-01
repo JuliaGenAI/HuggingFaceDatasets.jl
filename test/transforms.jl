@@ -10,6 +10,21 @@
     t = py2jl(pytuple((1, pylist([2, 3]))))
     @test t isa Tuple
     @test t == (1, [2, 3])
+
+    # a datasets.Column (datasets >= 4) is wrapped in a lazy `Column`, converting
+    # elements on access rather than materializing the whole column
+    pyds = datasets.Dataset.from_dict(pydict(label = [5, 0, 4]))
+    col = py2jl(pyds["label"])
+    @test col isa HuggingFaceDatasets.Column{Int}
+    @test col isa AbstractVector{Int}
+    @test size(col) == (3,)
+    @test col[1] == 5
+    @test col[2:3] == [0, 4]
+    @test col[[3, 1]] == [4, 5]
+    @test col[[true, false, true]] == [5, 4]   # logical indexing (Bool <: Integer)
+    @test col == [5, 0, 4]
+    @test collect(col) isa Vector{Int}
+    @test collect(col) == [5, 0, 4]
 end
 
 @testset "jl2numpy / numpy2jl" begin

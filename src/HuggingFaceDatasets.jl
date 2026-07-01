@@ -28,6 +28,8 @@ export Dataset,
 include("datasetdict.jl")
 export DatasetDict
 
+include("column.jl")
+
 include("transforms.jl")
 export py2jl, 
     jl2numpy, 
