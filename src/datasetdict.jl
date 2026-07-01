@@ -91,7 +91,13 @@ Base.haskey(d::DatasetDict, k::AbstractString) = pyconvert(Bool, pyin(k, d.py))
 
 Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
 
-Base.get(d::DatasetDict, k::AbstractString, default) = haskey(d, k) ? d[k] : default
+# Single Python round-trip: `datasets.DatasetDict` subclasses `dict`, so `dict.get`
+# with a `None` sentinel both tests membership and fetches the value at once. Stored
+# values are always `Dataset`s, so `None` unambiguously means "absent".
+function Base.get(d::DatasetDict, k::AbstractString, default)
+    x = d.pyd.get(k, nothing)
+    return pyis(x, pybuiltins.None) ? default : Dataset(x, d.jltransform)
+end
 
 # The generic `AbstractDict` `merge`/`filter` build the result with `empty(d)`, which
 # returns a plain `Dict` and drops the wrapper. Override them to return a `DatasetDict`

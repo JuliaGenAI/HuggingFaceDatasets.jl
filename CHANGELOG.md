@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CMYK, palette) return the raw array instead of raising an error.
 - Invalid arguments now raise `ArgumentError`, and out-of-range indices raise
   `BoundsError`, instead of `AssertionError`.
+- `get(::DatasetDict, key, default)` now does a single Python round-trip (via
+  `dict.get`) instead of a separate `haskey` + lookup.
 - Renamed the internal field holding the wrapped Python object to `py` on both
   `Dataset` (was `pyds`) and `DatasetDict` (was `pyd`), for consistency. This field is
   not part of the public API (it is shadowed by `getproperty`), so the change is
