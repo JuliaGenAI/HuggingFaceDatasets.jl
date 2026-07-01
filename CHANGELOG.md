@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CMYK, palette) return the raw array instead of raising an error.
 - Invalid arguments now raise `ArgumentError`, and out-of-range indices raise
   `BoundsError`, instead of `AssertionError`.
+- Renamed the internal field holding the wrapped Python object to `py` on both
+  `Dataset` (was `pyds`) and `DatasetDict` (was `pyd`), for consistency. This field is
+  not part of the public API (it is shadowed by `getproperty`), so the change is
+  non-breaking for documented usage.
 
 ### Fixed
 - Keyword arguments are correctly forwarded to wrapped Python methods (e.g.

@@ -42,21 +42,21 @@ Dict{String, Vector{Int64}} with 1 entry:
 ```
 """
 mutable struct Dataset
-    pyds::Py
+    py::Py
     jltransform
 
-    function Dataset(pyds::Py, jltransform = identity)
-        if !pyisinstance(pyds, datasets.Dataset)
-            throw(ArgumentError("expected a `datasets.Dataset`, got $(pytype(pyds))"))
+    function Dataset(py::Py, jltransform = identity)
+        if !pyisinstance(py, datasets.Dataset)
+            throw(ArgumentError("expected a `datasets.Dataset`, got $(pytype(py))"))
         end
-        return new(pyds, jltransform)
+        return new(py, jltransform)
     end
 end
 
 ## TODO make it work with arbitrary order tensors
 # function Dataset(d::Dict; jltransform = identity)
-#     pyds = datasets.Dataset.from_dict(d)
-#     return Dataset(pyds, jltransform)
+#     py = datasets.Dataset.from_dict(d)
+#     return Dataset(py, jltransform)
 # end
 
 function Base.getproperty(ds::Dataset, s::Symbol)
@@ -65,7 +65,7 @@ function Base.getproperty(ds::Dataset, s::Symbol)
     elseif s === :with_format
         return format -> with_format(ds, format)
     else
-        res = getproperty(getfield(ds, :pyds), s)
+        res = getproperty(getfield(ds, :py), s)
         if pycallable(res)
             return CallableWrapper(res)
         else
@@ -74,7 +74,7 @@ function Base.getproperty(ds::Dataset, s::Symbol)
     end
 end
 
-Base.length(ds::Dataset) = length(ds.pyds)
+Base.length(ds::Dataset) = length(ds.py)
 
 Base.firstindex(ds::Dataset) = 1
 Base.lastindex(ds::Dataset) = length(ds)
@@ -90,7 +90,7 @@ Base.getindex(ds::Dataset, ::Colon) = ds[1:length(ds)]
 
 function Base.getindex(ds::Dataset, i::AbstractVector{<:Integer})
     all(≥(1), i) || throw(BoundsError(ds, i))
-    x = getfield(ds, :pyds)[i .- 1]
+    x = getfield(ds, :py)[i .- 1]
     return ds.jltransform(x)
 end
 
@@ -100,16 +100,16 @@ function Base.getindex(ds::Dataset, i::Integer)
 end
 
 function Base.getindex(ds::Dataset, i::AbstractString)
-    x = ds.pyds[i]
+    x = ds.py[i]
     d = @py {i: x}
     return ds.jltransform(d)[i]
 end
 
 function Base.deepcopy_internal(ds::Dataset, stackdict::IdDict)
     haskey(stackdict, ds) && return stackdict[ds]::Dataset
-    pyds = pycopy.deepcopy(getfield(ds, :pyds))
+    py = pycopy.deepcopy(getfield(ds, :py))
     jltransform = Base.deepcopy_internal(getfield(ds, :jltransform), stackdict)
-    ds2 = Dataset(pyds, jltransform)
+    ds2 = Dataset(py, jltransform)
     stackdict[ds] = ds2
     return ds2
 end
@@ -118,11 +118,11 @@ end
 # but has an independent format, so `set_format!`/`set_jltransform!` on the copy
 # do not affect the original. Used internally by the copy-on-write helpers.
 function Base.copy(ds::Dataset)
-    pyds = pycopy.copy(getfield(ds, :pyds))
-    return Dataset(pyds, getfield(ds, :jltransform))
+    py = pycopy.copy(getfield(ds, :py))
+    return Dataset(py, getfield(ds, :jltransform))
 end
 
-Base.show(io::IO, ds::Dataset) = print(io, ds.pyds)
+Base.show(io::IO, ds::Dataset) = print(io, ds.py)
 
 """
     with_format(ds::Dataset, format)
@@ -162,10 +162,10 @@ version of [`with_format`](@ref).
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        ds.pyds.reset_format() # or d.pyd.set_format("python")
+        ds.py.reset_format() # or ds.py.set_format("python")
         ds.jltransform = py2jl
     else
-        ds.pyds.set_format(format)
+        ds.py.set_format(format)
         ds.jltransform = identity
     end
     return ds
@@ -174,7 +174,7 @@ end
 set_format!(ds::Dataset) = reset_format!(ds)
 
 function reset_format!(ds::Dataset)
-    ds.pyds.set_format(nothing)
+    ds.py.set_format(nothing)
     ds.jltransform = identity
     return ds
 end
