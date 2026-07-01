@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and mutations propagate in both directions.
 - `py2jl` on a Python tuple now returns a proper Julia tuple of converted elements. It
   previously returned a 1-tuple wrapping an unevaluated generator.
+- The `"julia"` format (and any custom `jltransform`) now survives forwarded methods that
+  return a new dataset (`shuffle`, `select`, `sort`, `filter`, `map`, `train_test_split`,
+  …). The parent's transform is propagated onto the result, mirroring how `datasets`
+  propagates Python-side formats; previously it was dropped and the result came back as a
+  raw `Py`.
 
 ## [0.3.4]
 

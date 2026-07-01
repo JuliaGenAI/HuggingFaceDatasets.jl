@@ -164,8 +164,35 @@ end
     ds = with_jltransform(mnist) do x
         x = py2jl(x)
         @test x["image"] isa Vector # batch
-        return x 
+        return x
     end
     ds[1]
     ds[1:2]
+end
+
+@testset "julia format survives forwarded methods" begin
+    ds = Dataset(HuggingFaceDatasets.datasets.Dataset.from_dict(
+        pydict(Dict("label" => pylist([5, 0, 4, 3, 2, 1])))))
+    dsj = with_format(ds, "julia")
+
+    # Methods returning a new `Dataset` keep the `"julia"` format (item 3 regression).
+    @test dsj.shuffle(seed=0)[1] isa Dict{String, Int64}
+    @test dsj.select(0:1)[1] isa Dict{String, Int64}
+    @test dsj.filter(@pyeval("lambda x: x['label'] > 2"))[1] isa Dict{String, Int64}
+
+    # ... and so does `train_test_split`, whose result is a `DatasetDict`.
+    split = dsj.train_test_split(test_size=0.5)
+    @test split isa DatasetDict
+    @test split["train"][1] isa Dict{String, Int64}
+
+    # A custom `jltransform` is propagated too.
+    dst = with_jltransform(ds, x -> py2jl(x["label"]) .+ 100)
+    @test dst.shuffle(seed=0)[1:2] isa Vector{Int}
+    @test all(≥(100), dst.select(0:1)[1:2])
+
+    # For a non-"julia" Python format, the transform is `identity`, so re-attaching is a
+    # no-op and Python's own format propagation still governs.
+    dsn = with_format(ds, "numpy")
+    @test getfield(dsn.select(0:1), :jltransform) === identity
+    @test dsn.select(0:1).format["type"] == "numpy"
 end
