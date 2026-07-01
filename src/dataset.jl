@@ -67,7 +67,7 @@ function Base.getproperty(ds::Dataset, s::Symbol)
     else
         res = getproperty(getfield(ds, :py), s)
         if pycallable(res)
-            return CallableWrapper(res)
+            return CallableWrapper(res, getfield(ds, :jltransform))
         else
             return res |> py2jl
         end
