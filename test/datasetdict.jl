@@ -22,6 +22,15 @@ mnist = load_dataset("ylecun/mnist")
     @test Set(k for (k, v) in mnist) == Set(["train", "test"])
 end
 
+@testset "display mirrors python repr" begin
+    # `text/plain` show should match the Python `datasets.DatasetDict` repr, not the
+    # generic `AbstractDict` multi-line display.
+    s = sprint(show, MIME("text/plain"), mnist)
+    @test startswith(s, "DatasetDict({")
+    @test occursin("train: Dataset({", s)
+    @test s == sprint(show, mnist)   # same as the 2-arg show
+end
+
 @testset "indexing, no (jl)transform by default" begin
     @test_throws MethodError mnist[1]
     @test mnist["test"] isa Dataset

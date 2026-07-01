@@ -3,8 +3,44 @@ CurrentModule = HuggingFaceDatasets
 CollapsedDocStrings = true
 ```
 
-# API
+# API Reference
 
-```@autodocs
-Modules = [HuggingFaceDatasets]
+This page documents the public types and functions. See the [Guide](@ref) for
+worked examples and background on the transform pipeline.
+
+## Types
+
+```@docs
+Dataset
+DatasetDict
 ```
+
+## Loading
+
+```@docs
+load_dataset
+```
+
+## Formats and transforms
+
+```@docs
+with_format
+set_format!
+reset_format!
+with_jltransform
+set_jltransform!
+```
+
+## Type conversion
+
+```@docs
+py2jl
+numpy2jl
+jl2numpy
+```
+
+## Index
+
+```@index
+```
+</content>

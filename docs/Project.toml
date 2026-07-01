@@ -1,6 +1,7 @@
-[sources]
-HuggingFaceDatasets = {path = ".."}
-
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 HuggingFaceDatasets = "d94b9a45-fdf5-4270-b024-5cbb9ef7117d"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+
+[sources]
+HuggingFaceDatasets = {path = ".."}

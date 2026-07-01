@@ -4,6 +4,12 @@
 
     d = pydict(["a" => 1, "b" => 2])
     @test py2jl(d) isa Dict{String,Int}
+
+    # tuples are converted element-wise to a Julia tuple (regression: used to return a
+    # 1-tuple wrapping an unevaluated generator)
+    t = py2jl(pytuple((1, pylist([2, 3]))))
+    @test t isa Tuple
+    @test t == (1, [2, 3])
 end
 
 @testset "jl2numpy / numpy2jl" begin
