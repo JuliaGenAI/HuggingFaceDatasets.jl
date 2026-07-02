@@ -21,11 +21,19 @@ that lazily converts observations to Julia types).
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).
 - `src/datasetdict.jl` — `DatasetDict`, a dict of `Dataset`s.
+- `src/iterabledataset.jl` — `IterableDataset`, the lazy streaming counterpart of
+  `Dataset` (wraps `datasets.IterableDataset`). Consumed by `Base.iterate`, not
+  indexing (no length / no random access); returned by
+  `load_dataset(...; streaming=true)` with a `split`.
+- `src/iterabledatasetdict.jl` — `IterableDatasetDict`, a dict of `IterableDataset`s
+  (wraps `datasets.IterableDatasetDict`); returned by streaming `load_dataset`
+  without a `split`.
 - `src/column.jl` — `Column`, a lazy 1-based `AbstractVector` view over a single
   dataset column (wraps the `datasets.Column` returned by `dataset[name]` on
   datasets ≥ 4), converting elements with `py2jl` on access.
 - `src/load_dataset.jl` — `load_dataset`, thin wrapper over
-  `datasets.load_dataset` returning a `Dataset` or `DatasetDict`.
+  `datasets.load_dataset` returning a `Dataset`/`DatasetDict` (or, with
+  `streaming=true`, an `IterableDataset`/`IterableDatasetDict`).
 - `src/toplevel.jl` — Julia wrappers for module-level `datasets` functions
   (`concatenate_datasets`, `interleave_datasets`, `load_from_disk`, and
   `from_csv`/`from_json`/`from_parquet`) that re-wrap results in the default
@@ -59,9 +67,11 @@ using Pkg; Pkg.test()
 
 - Test deps live in `test/Project.toml` (`Test`, `ImageCore`, `PythonCall`);
   the root project declares `[workspace] projects = ["test", "docs"]`.
-- `test/runtests.jl` runs `dataset.jl` and `datasetdict.jl` always, and
-  `no_ci.jl` (larger downloads: cifar10, beans, cppe-5) **only when `CI` is
-  not `"true"`**. Set `ENV["CI"]="true"` to mimic CI and skip those.
+- `test/runtests.jl` runs `transforms.jl`, `dataset.jl`, `datasetdict.jl`,
+  `iterabledataset.jl`, and `iterabledatasetdict.jl` always (the last two stay
+  offline, building streams from in-memory data), and `no_ci.jl` (larger downloads:
+  cifar10, beans, cppe-5) **only when `CI` is not `"true"`**. Set `ENV["CI"]="true"`
+  to mimic CI and skip those.
 - The first run downloads datasets and provisions the conda env, so it is slow.
 
 ## Changelog

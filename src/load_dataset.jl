@@ -8,6 +8,8 @@ All arguments are passed to the python function `datasets.load_dataset`.
 See the documentation [here](https://huggingface.co/docs/datasets/package_reference/loading_methods.html#datasets.load_dataset).
 
 Returns a [`DatasetDict`](@ref) or a [`Dataset`](@ref) depending on the `split` argument.
+With `streaming=true` it instead returns the lazy [`IterableDatasetDict`](@ref) or
+[`IterableDataset`](@ref) counterpart (consumed by iteration, not indexing).
 
 The result is returned in the `"julia"` format, so observations are lazily converted to
 native Julia types on access (see [`with_format`](@ref)). Use `set_format!(ds, nothing)`
@@ -65,6 +67,12 @@ function load_dataset(args...; kws...)
         return set_format!(Dataset(d), "julia")
     elseif pyisinstance(d, datasets.DatasetDict)
         return set_format!(DatasetDict(d), "julia")
+    elseif pyisinstance(d, datasets.IterableDataset)
+        # `streaming=true` with a `split`: a lazy single-split stream.
+        return set_format!(IterableDataset(d), "julia")
+    elseif pyisinstance(d, datasets.IterableDatasetDict)
+        # `streaming=true` without a `split`: a lazy dict of streams.
+        return set_format!(IterableDatasetDict(d), "julia")
     else
         return d
     end

@@ -37,6 +37,16 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `BoundsError`, instead of `AssertionError` — update any code catching `AssertionError`.
 
 ### Added
+- Streaming support: `load_dataset(...; streaming=true)` now returns an exported
+  `IterableDataset` (with a `split`) or `IterableDatasetDict` (without one) instead of leaking
+  a raw `Py`. `IterableDataset` is the lazy counterpart of `Dataset` — it is consumed by
+  iteration (`for obs in itds`, `collect`, `Iterators.take`), not indexing (it has no length or
+  random access, which raise an explanatory `ArgumentError`), and defaults to the `"julia"`
+  format so each yielded row converts to native Julia types. Its lazy transforms
+  (`take`/`skip`/`shuffle(buffer_size=…)`/`map`/`filter`) are forwarded and re-wrapped, the
+  julia-bridged `map`/`filter` overloads (and `ds.map`/`ds.filter`) work as for `Dataset`, and
+  `with_format`/`set_format!`/`with_jltransform` mirror the `Dataset` API.
+  `IterableDatasetDict` is the `AbstractDict{String, IterableDataset}` analogue of `DatasetDict`.
 - `Dataset(table)` construction from any [Tables.jl](https://github.com/JuliaData/Tables.jl)-compatible
   source (`DataFrame`, `CSV.File`, row tables, …). The table is materialized with
   `Tables.columntable` and fed through the existing `Dataset(::NamedTuple)` column path,
@@ -110,8 +120,10 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   CMYK, palette) return the raw array instead of raising an error.
 - `py2jl` read-path robustness: non-numeric numpy arrays (strings, ragged/object,
   datetimes) fall back from DLPack to a nested-list conversion; numpy scalars
-  (`np.str_`, `np.int64`, …) convert via `.item()`; and read-only numpy buffers are
-  copied before `from_dlpack`.
+  (`np.str_`, `np.int64`, …) convert via `.item()`; 0-dimensional numpy arrays (which the
+  numpy formatter produces when tensorizing a plain scalar cell) unwrap to native scalars
+  rather than `fill(x)` 0-d Julia arrays; and read-only numpy buffers are copied before
+  `from_dlpack`.
 - `get(::DatasetDict, key, default)` now does a single Python round-trip (via
   `dict.get`) instead of a separate `haskey` + lookup.
 - Renamed the internal field holding the wrapped Python object to `py` on both
