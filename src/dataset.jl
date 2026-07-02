@@ -56,6 +56,7 @@ end
 """
     Dataset(d::AbstractDict; jltransform = nothing)
     Dataset(nt::NamedTuple; jltransform = nothing)
+    Dataset.from_dict(data; features = nothing, split = nothing)
 
 Build a `Dataset` from in-memory Julia data: a `Dict` or `NamedTuple` mapping column
 names to columns, delegating to `datasets.Dataset.from_dict`.
@@ -74,6 +75,12 @@ and a range index stacks rows into a `(dims…, N)` tensor.
 The dataset is returned in the `"julia"` format by default (observations converted to
 native Julia types on access). Pass a `jltransform` to install a custom transform instead,
 or call [`reset_format!`](@ref) for the raw Python observations.
+
+`Dataset.from_dict(data; kws...)` is the same construction exposed under the Python
+classmethod name (`datasets.Dataset.from_dict`): it accepts the same Julia `data` as above —
+and also a raw Python mapping — forwards keyword arguments such as `features` and `split` to
+Python, and likewise defaults to the `"julia"` format. For plain in-memory columns,
+`Dataset.from_dict(data)` is equivalent to `Dataset(data)`.
 
 See also [`with_format`](@ref), [`jl2py`](@ref), and [`jl2numpy`](@ref).
 
@@ -103,6 +110,12 @@ julia> ds[1:3]["x"]         # a range stacks observations along the last axis
 2×3 Matrix{Int64}:
  1  2  3
  4  5  6
+
+julia> Dataset.from_dict(Dict("label" => [5, 0, 4]))   # Python classmethod name; == Dataset(...)
+Dataset({
+    features: ['label'],
+    num_rows: 3
+})
 ```
 """
 Dataset(d::AbstractDict; jltransform = nothing) =
