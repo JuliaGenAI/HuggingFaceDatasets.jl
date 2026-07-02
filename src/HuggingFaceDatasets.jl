@@ -1,6 +1,7 @@
 module HuggingFaceDatasets
 
 using PythonCall
+using Compat: @compat
 using MLUtils: getobs, numobs
 import MLUtils
 using DLPack: DLPack
@@ -44,6 +45,9 @@ include("toplevel.jl")
 export concatenate_datasets,
     interleave_datasets,
     load_from_disk
+
+# `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
+@compat public from_csv, from_json, from_parquet
 
 function __init__()
     # Since it is illegal in PythonCall to import a python module in a module, we need to do this here.
