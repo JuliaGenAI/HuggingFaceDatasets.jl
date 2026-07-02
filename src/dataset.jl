@@ -146,19 +146,66 @@ end
 _column_to_py(k::AbstractString, v) = throw(ArgumentError(
     "column \"$k\" must be an AbstractArray of observations, got $(typeof(v))"))
 
+# Property names on a `Dataset` routed to this package's own methods instead of being forwarded
+# to the wrapped Python object, so the Python-style calls stay Julian: the format methods
+# understand the `"julia"` pseudo-format, and `map`/`filter` bridge Julia values through
+# `py2jl`/`jl2py` (i.e. `ds.map(f)` is `map(f, ds)`). Returns a callable bound to `ds`, or
+# `nothing` when `s` is not one of these (the caller then forwards to Python). To hand
+# `map`/`filter` a raw Python callback, use the underlying `ds.py.map(...)`/`ds.py.filter(...)`.
+function _method_override(ds::Dataset, s::Symbol)
+    if s === :with_format
+        return (args...; kws...) -> with_format(ds, args...; kws...)
+    elseif s === :set_format
+        return (args...; kws...) -> set_format!(ds, args...; kws...)
+    elseif s === :reset_format
+        return (args...; kws...) -> reset_format!(ds, args...; kws...)
+    elseif s === :map
+        return (f; kws...) -> map(f, ds; kws...)
+    elseif s === :filter
+        return (f; kws...) -> filter(f, ds; kws...)
+    else
+        return nothing
+    end
+end
+
 function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
         return getfield(ds, s)
-    elseif s === :with_format
-        return format -> with_format(ds, format)
-    else
-        res = getproperty(getfield(ds, :py), s)
-        if pycallable(res)
-            return CallableWrapper(res, getfield(ds, :jltransform))
-        else
-            return res |> py2jl
-        end
     end
+    # Route the format and `map`/`filter` methods to this package's own versions (see
+    # `_method_override`); every other name forwards to the wrapped Python object.
+    override = _method_override(ds, s)
+    override === nothing || return override
+    res = getproperty(getfield(ds, :py), s)
+    if pycallable(res)
+        return CallableWrapper(res, getfield(ds, :jltransform))
+    else
+        return res |> py2jl
+    end
+end
+
+# Expose the `from_dict` constructor under its Python name, so `Dataset.from_dict(data; ...)`
+# mirrors `datasets.Dataset.from_dict`. `getproperty` is overloaded on the *type* object
+# itself; every name other than `from_dict` falls back to normal `DataType` field access
+# (`Dataset.name`, `Dataset.parameters`, ...), so type introspection is unaffected.
+function Base.getproperty(::Type{Dataset}, s::Symbol)
+    if s === :from_dict
+        return (data; kws...) -> _from_dict(data; kws...)
+    else
+        return getfield(Dataset, s)
+    end
+end
+
+# `Dataset.from_dict` implementation. A Julia `AbstractDict`/`NamedTuple` is turned into a
+# column mapping with the same orientation-aware logic as the `Dataset(data)` constructor
+# (scalar columns and last-axis-stacked N-D array columns); anything else (e.g. a raw Python
+# mapping) is converted with `jl2py`. Extra keyword arguments (`features`, `split`, ...) are
+# forwarded to the Python classmethod. The result is returned in the default `"julia"` format,
+# like the other construction entry points. For the raw Python behavior (first-axis rows, no
+# forced format) call `datasets.Dataset.from_dict(...)` directly.
+function _from_dict(data; kws...)
+    py = data isa Union{AbstractDict,NamedTuple} ? _from_dict_pydict(data) : jl2py(data)
+    return set_format!(Dataset(datasets.Dataset.from_dict(py; kws...)), "julia")
 end
 
 Base.length(ds::Dataset) = length(ds.py)
@@ -204,8 +251,9 @@ multiprocessing.
 Keyword arguments (`batched`, `num_proc`, `remove_columns`, ...) are forwarded to the
 Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
 
-Use `ds.map(...)` (the forwarded Python method) if you need to hand `map` a raw Python
-callback instead.
+`ds.map(f; ...)` is equivalent to this `map(f, ds; ...)` (the property call routes here, not
+to Python). If you need to hand `map` a raw Python callback instead, use the underlying
+`ds.py.map(...)`.
 
 See also [`filter`](@ref).
 
@@ -239,6 +287,9 @@ a `Bool` (or, when `batched=true`, a `Vector{Bool}`), converted back to Python w
 
 Keyword arguments are forwarded to the Python `filter`; the parent's julia format/transform
 is preserved on the returned `Dataset`.
+
+`ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`; use the underlying
+`ds.py.filter(...)` for a raw Python callback.
 
 See also [`map`](@ref).
 """

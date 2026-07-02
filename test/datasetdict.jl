@@ -153,12 +153,22 @@ end
     @test mnist["test"].format["type"] == "numpy"           # original untouched
 end
 
-@testset "merge / filter preserve the wrapper type" begin
-    # `merge`/`filter` must return a `DatasetDict`, not a plain `Dict{String,Dataset}`.
-    f = filter(p -> p.first == "train", mnist)
-    @test f isa DatasetDict
-    @test collect(keys(f)) == ["train"]
+@testset "property-style format methods (python interface)" begin
+    # `d.set_format`/`d.reset_format`/`d.with_format` route to this package's methods, so the
+    # `"julia"` pseudo-format works across all splits through the Python-style calls.
+    d = set_format!(copy(mnist), nothing)
+    @test d["test"].format["type"] === nothing
+    d.set_format("julia")                                   # would error if forwarded to Python
+    @test d["test"].format["type"] == "numpy"
+    @test d["test"][1] isa Dict
+    set_format!(d, nothing)
+    d.reset_format()
+    @test d["test"].format["type"] == "numpy"
+    @test d.with_format("julia") isa DatasetDict
+end
 
+@testset "merge preserves the wrapper type" begin
+    # `merge` must return a `DatasetDict`, not a plain `Dict{String,Dataset}`.
     extra = load_dataset("ylecun/mnist")["test"]   # a lone `Dataset`
     m = merge(mnist, Dict("extra" => extra))
     @test m isa DatasetDict
@@ -168,13 +178,51 @@ end
     m2 = merge(mnist, Dict("train" => extra))
     @test m2 isa DatasetDict
     @test length(m2["train"]) == length(extra)
+end
 
-    # the `jltransform` of the first argument is carried over
-    dj = with_format(mnist, "julia")
-    fj = filter(p -> p.first == "test", dj)
-    @test fj isa DatasetDict
-    @test fj["test"][1] isa Dict
-    @test fj["test"][1]["label"] isa Int
+@testset "julia-friendly map / filter (DatasetDict)" begin
+    dd = DatasetDict("train" => Dataset((; label=[5, 0, 4, 3])),
+                     "test"  => Dataset((; label=[1, 2])))
+
+    # `map(f, dd)` and `dd.map(f)` both bridge Julia values, per-example over every split
+    dm = map(x -> Dict("label" => x["label"] + 10), dd)
+    @test dm isa DatasetDict
+    @test Set(keys(dm)) == Set(["train", "test"])
+    @test dm["train"][1:4]["label"] == [15, 10, 14, 13]
+    @test dm["test"][1:2]["label"] == [11, 12]
+    @test dd.map(x -> Dict("label" => x["label"] + 10))["train"][1:4]["label"] == [15, 10, 14, 13]
+
+    # `filter(f, dd)` and `dd.filter(f)` both filter EXAMPLES within every split (python
+    # `DatasetDict.filter`) — the function form no longer filters splits.
+    df = filter(x -> x["label"] > 2, dd)
+    @test df isa DatasetDict
+    @test Set(keys(df)) == Set(["train", "test"])       # both splits kept
+    @test sort(df["train"][1:length(df["train"])]["label"]) == [3, 4, 5]
+    @test length(df["test"]) == 0                        # none > 2
+    # the property form is equivalent
+    dfp = dd.filter(x -> x["label"] > 2)
+    @test sort(dfp["train"][1:length(dfp["train"])]["label"]) == [3, 4, 5]
+    @test length(dfp["test"]) == 0
+
+    # batched map keyword is forwarded
+    db = dd.map(x -> Dict("label" => x["label"] .* 2); batched=true)
+    @test db["train"][1:4]["label"] == [10, 0, 8, 6]
+end
+
+@testset "keys/length are cached and stay correct" begin
+    # `keys`/`length`/`haskey` are served from the cached split names (no Python call), which
+    # is what makes REPL `d[<TAB>` completion safe. Guard that the cache is correct and stays
+    # in sync with the underlying python object across (re)construction.
+    dd = DatasetDict("a" => Dataset((; x=[1, 2])), "b" => Dataset((; x=[3])))
+    @test keys(dd) == ["a", "b"]                 # cached, ordered
+    @test length(dd) == 2
+    @test haskey(dd, "a") && !haskey(dd, "z")
+    @test keys(dd) == [pyconvert(String, k) for k in dd.py.keys()]   # matches python truth
+
+    # reconstruction via a forwarded/bridged method keeps the cache correct
+    dm = map(x -> Dict("x" => x["x"] .+ 1), dd)
+    @test keys(dm) == ["a", "b"] && length(dm) == 2
+    @test keys(deepcopy(dd)) == ["a", "b"]
 end
 
 @testset "set_jltransform!" begin
