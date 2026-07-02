@@ -113,7 +113,7 @@ end
     with_format(d::IterableDatasetDict, format)
 
 Return a copy of `d` with the format set to `format` on every split (see
-[`with_format(::IterableDataset, format)`](@ref)).
+[`with_format`](@ref)).
 """
 function with_format(d::IterableDatasetDict, format)
     d = copy(d)

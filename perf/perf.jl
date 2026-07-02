@@ -1,61 +1,115 @@
-using HuggingFaceDatasets
-using BenchmarkTools
-using MLDatasets
+# Julia data-access benchmarks for HuggingFaceDatasets.jl.
+#
+# Measures the data-loading / preprocessing operations that dominate a deep-learning
+# input pipeline, on the MNIST test split (10k × 28×28 UInt8 images):
+#
+#   single   per-observation access:  getobs(ds, i)        for every i
+#   batch    batched access:          getobs(ds, i:i+127)  over the whole split
+#   full     materialize everything:  getobs(ds, :)
+#   epoch    a realistic pass:         batch + cast to Float32/255 + one-hot labels
+#
+# across several formats, plus MLDatasets (native, fully in-memory) as a Julia baseline:
+#
+#   mldatasets   MLDatasets.MNIST                         (native Julia arrays)
+#   plain        HF dataset, no format                    (raw Python objects / PIL images)
+#   numpy        HF dataset, `set_format!(ds, "numpy")`   (raw NumPy, no py2jl)
+#   julia        HF dataset, `"julia"` format             (numpy-backed + py2jl, the default)
+#
+# The Python counterpart (`perf.py`) runs the same tasks straight through `datasets`,
+# so the two tables are directly comparable. See README.md for collected numbers.
+#
+# Run with this folder's project:
+#   julia --project=perf perf/perf.jl
 
-function f(ds)
-    for i in 1:numobs(ds)
-        getobs(ds, i)
+using HuggingFaceDatasets
+using MLUtils: numobs, getobs
+using MLDatasets: MNIST
+using BenchmarkTools
+using Printf
+
+# --- tasks -----------------------------------------------------------------------------
+
+single(ds) = for i in 1:numobs(ds)
+    getobs(ds, i)
+end
+
+function batch(ds; bs = 128)
+    n = numobs(ds)
+    for i in 1:bs:n
+        getobs(ds, i:min(i + bs - 1, n))
     end
 end
-function fbatch(ds)
-    for i in 1:128:numobs(ds)-128
-        getobs(ds, i:i+127)
+
+full(ds) = getobs(ds, 1:numobs(ds))
+
+# one-hot encode a vector of 0-based labels into a (10, N) Float32 matrix
+function onehot10(labels)
+    y = zeros(Float32, 10, length(labels))
+    for (j, l) in enumerate(labels)
+        y[l + 1, j] = 1f0
     end
+    return y
 end
-function fall(ds)
-    getobs(ds, :)
+
+# A realistic training-epoch pass over the data: read each batch, cast images to
+# Float32 in [0, 1] and one-hot the labels, accumulating a checksum so nothing is
+# optimized away. `image`/`label` accessors differ per source, hence the closures.
+function epoch(ds, image, label; bs = 128)
+    n = numobs(ds)
+    s = 0.0f0
+    for i in 1:bs:n
+        b = getobs(ds, i:min(i + bs - 1, n))
+        x = Float32.(image(b)) ./ 255f0
+        y = onehot10(label(b))
+        s += sum(x) + sum(y)
+    end
+    return s
 end
+
+# --- driver ----------------------------------------------------------------------------
+
+# @belapsed in seconds -> ms
+ms(f) = 1e3 * @belapsed $f()
 
 function bench()
-    mld = MNIST(split=:test)
-    ds_plain = load_dataset("ylecun/mnist", split="test")
-    ds_julia = with_format(ds_plain, "julia")
-    ds_numpy = with_format(ds_plain, "numpy")
-    ds_jnumpy = with_jltransform(py2jl, ds_numpy) # numpy + py2jl
+    mld    = MNIST(split = :test)
+    base   = load_dataset("ylecun/mnist", split = "test")   # "julia" format by default
+    plain  = set_format!(copy(base), nothing)               # raw Python objects / PIL images
+    numpy  = with_format(base, "numpy")                     # raw NumPy, no py2jl
+    julia  = with_format(base, "julia")                     # numpy-backed + py2jl (the default)
 
-    for (name, ds) in [("mldatasets", mld),
-                      ("plain", ds_plain),
-                      ("julia", ds_julia),
-                      ("numpy", ds_numpy),
-                      ("jnumpy", ds_jnumpy)]
-        println("# $name")
-        @btime f($ds)
-        @btime fbatch($ds)
-        @btime fall($ds)
+    # image/label accessors for the epoch task (batch layout differs per source)
+    mld_img(b) = b.features;         mld_lab(b) = b.targets
+    hf_img(b)  = b["image"];         hf_lab(b)  = b["label"]
+
+    # The epoch/preprocessing task needs native Julia arrays; only the `julia` format
+    # and MLDatasets hand those back (`plain`/`numpy` batches are raw Python objects,
+    # so converting them *is* what the `julia` format does). Those get "—".
+    variants = [
+        ("mldatasets", mld,   mld_img, mld_lab),
+        ("plain",      plain, nothing, nothing),
+        ("numpy",      numpy, nothing, nothing),
+        ("julia",      julia, hf_img,  hf_lab),
+    ]
+
+    rows = []
+    for (name, ds, img, lab) in variants
+        println(stderr, "benchmarking $name ...")
+        t_single = ms(() -> single(ds))
+        t_batch  = ms(() -> batch(ds))
+        t_full   = ms(() -> full(ds))
+        t_epoch  = img === nothing ? nothing : ms(() -> epoch(ds, img, lab))
+        push!(rows, (name, t_single, t_batch, t_full, t_epoch))
+    end
+
+    cell(x) = x === nothing ? @sprintf("%10s", "—") : @sprintf("%10.1f", x)
+    println("\n## Julia (HuggingFaceDatasets.jl) — MNIST test, times in ms\n")
+    @printf("| %-11s | %10s | %10s | %10s | %10s |\n",
+            "variant", "single", "batch", "full", "epoch")
+    @printf("|%s|%s|%s|%s|%s|\n", "-"^13, "-"^12, "-"^12, "-"^12, "-"^12)
+    for (name, s, b, f, e) in rows
+        @printf("| %-11s | %s | %s | %s | %s |\n", name, cell(s), cell(b), cell(f), cell(e))
     end
 end
 
-# hf is slow at reading image datasets.
-# Pytorch vision is much faset (see the notebook in perf/) 
-
 bench()
-# # MLDatasets
-# 19.515 ms (120005 allocations: 34.64 MiB)
-# 4.671 ms (1097 allocations: 29.97 MiB)
-# 717.324 ns (6 allocations: 240 bytes)
-# # plain
-# 602.001 ms (668464 allocations: 18.06 MiB)
-# 266.483 ms (390 allocations: 6.09 KiB)
-# 265.651 ms (5 allocations: 80 bytes)
-# # julia
-# 985.251 ms (2398464 allocations: 93.28 MiB)
-# 379.270 ms (659256 allocations: 27.31 MiB)
-# 378.751 ms (650134 allocations: 27.01 MiB)
-# # numpy
-# 1.264 s (728464 allocations: 19.13 MiB)
-# 311.426 ms (390 allocations: 6.09 KiB)
-# 318.403 ms (5 allocations: 80 bytes)
-# # jnumpy
-# 1.527 s (2208464 allocations: 110.91 MiB)
-# 318.356 ms (13962 allocations: 637.41 KiB)
-# 335.109 ms (179 allocations: 8.17 KiB)
