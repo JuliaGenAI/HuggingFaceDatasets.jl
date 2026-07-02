@@ -105,6 +105,100 @@ end
     @test_throws ArgumentError Dataset(5)
 end
 
+@testset "top-level combinators and file constructors" begin
+    a = Dataset((; label = [1, 2]))
+    b = Dataset((; label = [3, 4, 5]))
+
+    @testset "concatenate_datasets" begin
+        # varargs and vector forms are equivalent; result is in the julia format
+        ds = concatenate_datasets(a, b)
+        @test ds isa Dataset
+        @test ds.format["type"] == "numpy"          # default julia format
+        @test length(ds) == 5
+        @test ds[:]["label"] == [1, 2, 3, 4, 5]
+        @test concatenate_datasets([a, b])[:]["label"] == [1, 2, 3, 4, 5]
+
+        # column-wise concatenation (same number of rows)
+        c = Dataset((; x = [10, 20]))
+        wide = concatenate_datasets(a, c; axis = 1)
+        @test Set(wide.column_names) == Set(["label", "x"])
+        @test wide[1] == Dict("label" => 1, "x" => 10)
+    end
+
+    @testset "interleave_datasets" begin
+        x = Dataset((; label = [1, 1, 1]))
+        y = Dataset((; label = [2, 2, 2]))
+        ds = interleave_datasets(x, y)
+        @test ds isa Dataset
+        @test ds.format["type"] == "numpy"
+        @test ds[:]["label"] == [1, 2, 1, 2, 1, 2]
+        @test interleave_datasets([x, y])[:]["label"] == [1, 2, 1, 2, 1, 2]
+    end
+
+    @testset "save_to_disk / load_from_disk round-trip" begin
+        mktempdir() do dir
+            path = joinpath(dir, "ds")
+            a.save_to_disk(path)                     # write side is a forwarded method
+            loaded = load_from_disk(path)            # read side is the new top-level wrapper
+            @test loaded isa Dataset
+            @test loaded.format["type"] == "numpy"   # default julia format
+            @test loaded[:]["label"] == [1, 2]
+
+            # the Python classmethod name also works, via type-level getproperty
+            loaded = Dataset.load_from_disk(path)
+            @test loaded isa Dataset
+            @test loaded[:]["label"] == [1, 2]
+
+            # ... and on DatasetDict for a saved dict of splits
+            dpath = joinpath(dir, "dd")
+            DatasetDict("train" => a).py.save_to_disk(dpath)
+            dd = DatasetDict.load_from_disk(dpath)
+            @test dd isa DatasetDict
+            @test dd["train"][:]["label"] == [1, 2]
+            @test load_from_disk(dpath) isa DatasetDict     # top-level auto-detects
+        end
+    end
+
+    @testset "from_csv / from_json / from_parquet" begin
+        mktempdir() do dir
+            src = Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))
+
+            csv = joinpath(dir, "d.csv")
+            src.py.to_csv(csv)
+            ds = HuggingFaceDatasets.from_csv(csv)
+            @test ds isa Dataset
+            @test ds.format["type"] == "numpy"
+            @test ds[:]["label"] == [5, 0, 4]
+            @test ds[:]["text"] == ["a", "b", "c"]
+            @test Dataset.from_csv(csv)[:]["label"] == [5, 0, 4]   # classmethod name
+
+            json = joinpath(dir, "d.json")
+            src.py.to_json(json)
+            @test HuggingFaceDatasets.from_json(json)[:]["label"] == [5, 0, 4]
+            @test Dataset.from_json(json)[:]["label"] == [5, 0, 4]
+
+            parquet = joinpath(dir, "d.parquet")
+            src.py.to_parquet(parquet)
+            @test HuggingFaceDatasets.from_parquet(parquet)[:]["label"] == [5, 0, 4]
+            @test Dataset.from_parquet(parquet)[:]["label"] == [5, 0, 4]
+        end
+    end
+
+    @testset "type introspection unaffected by type-level getproperty" begin
+        @test fieldnames(Dataset) == (:py, :jltransform)
+        @test fieldnames(DatasetDict) == (:py, :jltransform, :splits)
+    end
+
+    @testset "jl2py unwraps the wrapper types" begin
+        # the inbound half of the one-rewrap boundary
+        @test pyis(jl2py(a), getfield(a, :py))
+        dd = DatasetDict("train" => a)
+        @test pyis(jl2py(dd), getfield(dd, :py))
+        col = a["label"]
+        @test pyis(jl2py(col), getfield(col, :py))
+    end
+end
+
 @testset "keyword arguments are forwarded to python methods" begin
     # `train_test_split` requires the `test_size` keyword: regression test for the
     # kwargs-forwarding bug where keywords were splatted as positional arguments.

@@ -160,6 +160,18 @@ function Base.getproperty(d::DatasetDict, s::Symbol)
     end
 end
 
+# Expose the `datasets.DatasetDict` classmethods under their Python names, so
+# `DatasetDict.load_from_disk(path)` mirrors `datasets.DatasetDict.load_from_disk` (routing to
+# `_wrap_toplevel` in `toplevel.jl`). Like `Dataset`'s type-level getproperty, every other name
+# falls back to normal `DataType` field access, so type introspection is unaffected.
+function Base.getproperty(::Type{DatasetDict}, s::Symbol)
+    if s === :load_from_disk
+        return (path; kws...) -> _wrap_toplevel(datasets.DatasetDict.load_from_disk(jl2py(path); kws...))
+    else
+        return getfield(DatasetDict, s)
+    end
+end
+
 # `length`/`keys`/`haskey` answer from the cached `splits` (no Python call): correct because
 # splits are immutable, and required so the REPL's async `d[<TAB>` completion — which calls
 # `keys`/`length` — does not invoke libpython off the main task and segfault.
