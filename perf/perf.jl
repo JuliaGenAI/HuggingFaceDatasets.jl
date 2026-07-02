@@ -26,6 +26,7 @@ using MLUtils: numobs, getobs
 using MLDatasets: MNIST
 using BenchmarkTools
 using Printf
+using Distributed
 
 # --- tasks -----------------------------------------------------------------------------
 
@@ -112,4 +113,46 @@ function bench()
     end
 end
 
+# --- parallel loading across worker processes -------------------------------------------
+#
+# Thread-based `parallel=true` cannot speed up a PythonCall read: the CPython GIL serializes
+# it, so N threads read no faster than one (and can segfault without GIL guards). Separate
+# worker *processes* each have their own interpreter/GIL, so the reads run in parallel. A
+# `Dataset` is serializable — it ships a by-reference pickle of its on-disk Arrow files and
+# each worker re-mmaps them (no data copy) — so a process pool reads batches concurrently.
+# This is the mechanism a process-based `DataLoader(ds; num_workers=N)` would build on. Here
+# we read the whole split in batches, serially vs across N worker processes.
+function bench_parallel(; bs = 128, worker_counts = (2, 4))
+    base    = load_dataset("ylecun/mnist", split = "test")
+    ds      = with_format(base, "julia")
+    n       = numobs(ds)
+    idxsets = [i:min(i + bs - 1, n) for i in 1:bs:n]
+    readf   = ix -> getobs(ds, ix)   # a single closure ⇒ CachingPool ships `ds` once per worker
+
+    println(stderr, "benchmarking parallel loading ...")
+    t_serial = ms(() -> foreach(readf, idxsets))
+    rows = [("serial", t_serial, 1.0)]
+
+    procs = addprocs(maximum(worker_counts); exeflags = `--project=$(dirname(Base.active_project()))`)
+    try
+        @everywhere procs using HuggingFaceDatasets, MLUtils
+        for k in worker_counts
+            pool = CachingPool(procs[1:k])
+            pmap(readf, pool, idxsets)                    # warm up: caches `ds` on the k workers
+            t = ms(() -> pmap(readf, pool, idxsets))
+            push!(rows, ("$k procs", t, t_serial / t))
+        end
+    finally
+        rmprocs(procs)
+    end
+
+    println("\n## Parallel loading (process pool) — MNIST test, batchsize $bs, whole split\n")
+    @printf("| %-9s | %10s | %8s |\n", "workers", "time (ms)", "speedup")
+    @printf("|%s|%s|%s|\n", "-"^11, "-"^12, "-"^10)
+    for (name, t, sp) in rows
+        @printf("| %-9s | %10.1f | %7.2fx |\n", name, t, sp)
+    end
+end
+
 bench()
+bench_parallel()

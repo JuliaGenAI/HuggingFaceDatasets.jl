@@ -24,6 +24,10 @@ end
     include("iterabledatasetdict.jl")
 end
 
+@testset "serialization" begin
+    include("serialization.jl")
+end
+
 if !parse(Bool, get(ENV, "CI", "false"))
     @info "Testing larger datasets"
     @testset "larger datasets" begin

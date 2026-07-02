@@ -74,6 +74,20 @@ Software: Julia 1.12, Python 3.12, `datasets` 4.8.5, NumPy 2.5, PyArrow 24.
 | plain       |      415.8 |      246.8 |      277.2 |          — |
 | numpy       |      965.4 |      285.2 |      311.8 |      309.7 |
 
+### Parallel loading — process pool (HuggingFaceDatasets.jl)
+
+Reading the whole split in batches (`getobs(ds, i:j)`, batch size 128), serial vs across N
+worker **processes** (`Distributed`). Thread-based `parallel=true` cannot help — the CPython
+GIL serializes the read — but separate processes each hold their own interpreter/GIL, and a
+`Dataset` serializes as a by-reference pickle of its on-disk Arrow files (workers re-mmap, no
+copy), so the reads run concurrently. Single run; the `serial` row is the in-run baseline.
+
+| workers   |  time (ms) |  speedup |
+|-----------|-----------:|---------:|
+| serial    |      265.5 |    1.00× |
+| 2 procs   |      151.8 |    1.75× |
+| 4 procs   |       83.2 |    3.19× |
+
 ## Takeaways
 
 - **Batch, don't loop over samples.** Per-observation access is the slowest path in every
@@ -92,3 +106,10 @@ Software: Julia 1.12, Python 3.12, `datasets` 4.8.5, NumPy 2.5, PyArrow 24.
   memory, materialize it once with `getobs(ds, :)` and feed an in-memory `DataLoader`
   (see [`../examples/flux_mnist.jl`](../examples/flux_mnist.jl)); the Arrow decode then
   becomes a one-time cost rather than a per-batch one.
+
+- **When it doesn't fit in memory, parallelize the read with processes, not threads.** The
+  Arrow-decode/`py2jl` read is GIL-bound, so a thread pool (`DataLoader(parallel=true)`)
+  reads no faster than one thread. Worker *processes* each get their own interpreter/GIL and
+  scale — ~3× on 4 processes for the MNIST batch read above. A `Dataset` pickles by reference
+  to its on-disk Arrow files, so workers share the data (re-mmap, no copy); this is what a
+  process-based `DataLoader(ds; num_workers=N)` would build on.
