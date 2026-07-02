@@ -12,7 +12,7 @@ function (cw::CallableWrapper)(args...; kwargs...)
     # Re-attach it so the `"julia"` format (and any custom transform) survives the call,
     # matching how `datasets` propagates Python-side formats. For a real Python format the
     # transform is `identity`, so this is a no-op and Python's own propagation still governs.
-    if y isa Dataset || y isa DatasetDict
+    if y isa Union{Dataset, DatasetDict, IterableDataset, IterableDatasetDict}
         return set_jltransform!(y, cw.jltransform)
     end
     return y

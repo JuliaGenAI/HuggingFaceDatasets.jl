@@ -30,6 +30,12 @@ export Dataset,
 include("datasetdict.jl")
 export DatasetDict
 
+include("iterabledataset.jl")
+export IterableDataset
+
+include("iterabledatasetdict.jl")
+export IterableDatasetDict
+
 include("column.jl")
 
 include("transforms.jl")

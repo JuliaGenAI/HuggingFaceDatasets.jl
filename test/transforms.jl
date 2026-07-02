@@ -25,6 +25,12 @@
     @test col == [5, 0, 4]
     @test collect(col) isa Vector{Int}
     @test collect(col) == [5, 0, 4]
+
+    # a 0-d numpy array (produced by the numpy formatter when it tensorizes a plain scalar
+    # cell) unwraps to a native scalar, not a `fill(x)` 0-d Julia array
+    z = np.asarray(7)
+    @test py2jl(z) == 7
+    @test py2jl(z) isa Integer
 end
 
 @testset "jl2py" begin

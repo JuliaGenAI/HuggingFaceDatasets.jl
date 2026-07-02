@@ -37,6 +37,32 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `BoundsError`, instead of `AssertionError` — update any code catching `AssertionError`.
 
 ### Added
+- Streaming support: `load_dataset(...; streaming=true)` now returns an exported
+  `IterableDataset` (with a `split`) or `IterableDatasetDict` (without one) instead of leaking
+  a raw `Py`. `IterableDataset` is the lazy counterpart of `Dataset` — it is consumed by
+  iteration (`for obs in itds`, `collect`, `Iterators.take`), not indexing (it has no length or
+  random access, which raise an explanatory `ArgumentError`), and defaults to the `"julia"`
+  format so each yielded row converts to native Julia types. Its lazy transforms
+  (`take`/`skip`/`shuffle(buffer_size=…)`/`map`/`filter`) are forwarded and re-wrapped, the
+  julia-bridged `map`/`filter` overloads (and `ds.map`/`ds.filter`) work as for `Dataset`, and
+  `with_format`/`set_format!`/`with_jltransform` mirror the `Dataset` API.
+  `IterableDatasetDict` is the `AbstractDict{String, IterableDataset}` analogue of `DatasetDict`.
+- `Dataset(table)` construction from any [Tables.jl](https://github.com/JuliaData/Tables.jl)-compatible
+  source (`DataFrame`, `CSV.File`, row tables, …). The table is materialized with
+  `Tables.columntable` and fed through the existing `Dataset(::NamedTuple)` column path,
+  avoiding the pandas dependency of `datasets.Dataset.from_pandas` while covering many more
+  sources.
+- Top-level `datasets` functions are now exposed as Julia wrappers that re-wrap their
+  results in the default `"julia"` format instead of returning a raw `Py`:
+  `concatenate_datasets`, `interleave_datasets`, and `load_from_disk` (exported; the last
+  closes the `save_to_disk`/load asymmetry and auto-detects `Dataset` vs `DatasetDict`), plus
+  `from_csv`/`from_json`/`from_parquet` (public but not exported).
+- Python-classmethod-style access via type-level `getproperty`: `Dataset.from_dict(...)`,
+  `Dataset.from_csv`/`Dataset.from_json`/`Dataset.from_parquet`, and
+  `Dataset.load_from_disk`/`DatasetDict.load_from_disk`, mirroring the Python API and routing
+  to the wrappers above.
+- `jl2py` on a `Dataset`/`DatasetDict`/`Column` unwraps to the underlying Python object, so
+  the wrapper types can be passed directly as arguments to Python calls.
 - `Dataset(::AbstractDict)` and `Dataset(::NamedTuple)` constructors that build a dataset
   from in-memory Julia column vectors (via `datasets.Dataset.from_dict`), replacing the
   long-standing commented-out stub. Scalar columns and array-valued columns (given as a
@@ -77,6 +103,15 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   format flag no longer duplicates the dataset.
 
 ### Changed
+- The Python-style `getproperty` interface now bridges Julia values consistently:
+  `ds.set_format(...)`/`ds.reset_format()` (and the `DatasetDict` forms) route through the
+  julia format methods (so `ds.set_format("julia")` works and matches the `set_format!`/
+  `reset_format!` functions), and `ds.map(f)`/`ds.filter(f)` bridge Julia values so that
+  `ds.map(f) == map(f, ds)`. `map(f, dd)` was added for `DatasetDict`, and `filter(f, dd)`
+  now filters *examples* like `dd.filter(f)` (deliberately overriding the `AbstractDict`
+  split-filter).
+- Renamed the internal field of `Column` from `pyobj` to `py`, matching `Dataset`/
+  `DatasetDict`. Not part of the public API.
 - `DatasetDict` now has a dedicated `text/plain` display mirroring the Python
   `datasets.DatasetDict` repr (nested `Dataset` summaries), instead of the generic
   `AbstractDict` multi-line display.
@@ -85,8 +120,10 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   CMYK, palette) return the raw array instead of raising an error.
 - `py2jl` read-path robustness: non-numeric numpy arrays (strings, ragged/object,
   datetimes) fall back from DLPack to a nested-list conversion; numpy scalars
-  (`np.str_`, `np.int64`, …) convert via `.item()`; and read-only numpy buffers are
-  copied before `from_dlpack`.
+  (`np.str_`, `np.int64`, …) convert via `.item()`; 0-dimensional numpy arrays (which the
+  numpy formatter produces when tensorizing a plain scalar cell) unwrap to native scalars
+  rather than `fill(x)` 0-d Julia arrays; and read-only numpy buffers are copied before
+  `from_dlpack`.
 - `get(::DatasetDict, key, default)` now does a single Python round-trip (via
   `dict.get`) instead of a separate `haskey` + lookup.
 - Renamed the internal field holding the wrapped Python object to `py` on both
@@ -95,6 +132,9 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   non-breaking for documented usage.
 
 ### Fixed
+- Fixed a segfault triggered by REPL tab-completion on a `DatasetDict` (`d[<TAB>`), which
+  called into libpython off the main task. `DatasetDict` split names are now cached, so
+  `keys`/`length`/`haskey` are Python-free (also a small performance win).
 - Keyword arguments are correctly forwarded to wrapped Python methods (e.g.
   `ds.train_test_split(test_size=0.2)`, `ds.shuffle(seed=…)`, `ds.map(batched=true)`).
   They were previously passed as positional arguments and rejected by Python.

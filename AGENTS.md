@@ -21,12 +21,28 @@ that lazily converts observations to Julia types).
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).
 - `src/datasetdict.jl` — `DatasetDict`, a dict of `Dataset`s.
+- `src/iterabledataset.jl` — `IterableDataset`, the lazy streaming counterpart of
+  `Dataset` (wraps `datasets.IterableDataset`). Consumed by `Base.iterate`, not
+  indexing (no length / no random access); returned by
+  `load_dataset(...; streaming=true)` with a `split`.
+- `src/iterabledatasetdict.jl` — `IterableDatasetDict`, a dict of `IterableDataset`s
+  (wraps `datasets.IterableDatasetDict`); returned by streaming `load_dataset`
+  without a `split`.
+- `src/column.jl` — `Column`, a lazy 1-based `AbstractVector` view over a single
+  dataset column (wraps the `datasets.Column` returned by `dataset[name]` on
+  datasets ≥ 4), converting elements with `py2jl` on access.
 - `src/load_dataset.jl` — `load_dataset`, thin wrapper over
-  `datasets.load_dataset` returning a `Dataset` or `DatasetDict`.
-- `src/transforms.jl` — `py2jl` / `numpy2jl` / `jl2numpy`. `py2jl` recursively
-  converts Python containers, numpy arrays (copyless via DLPack), and PIL images
-  (to `RGB{N0f8}` / `Gray{N0f8}`) into Julia types. This is what the `"julia"`
-  format applies.
+  `datasets.load_dataset` returning a `Dataset`/`DatasetDict` (or, with
+  `streaming=true`, an `IterableDataset`/`IterableDatasetDict`).
+- `src/toplevel.jl` — Julia wrappers for module-level `datasets` functions
+  (`concatenate_datasets`, `interleave_datasets`, `load_from_disk`, and
+  `from_csv`/`from_json`/`from_parquet`) that re-wrap results in the default
+  `"julia"` format.
+- `src/transforms.jl` — `py2jl` / `numpy2jl` / `jl2numpy` / `jl2py`. `py2jl`
+  recursively converts Python containers, numpy arrays (copyless via DLPack), and
+  PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
+  format is numpy-backed, so numeric array columns decode to real N-D Julia arrays
+  and image columns decode to raw numeric arrays (not `Colorant` colorviews).
 - `src/callable.jl`, `src/observation.jl` — small helpers (method forwarding to
   the wrapped Python object; `MLUtils` `getobs`/`numobs` integration).
 
@@ -35,7 +51,10 @@ that lazily converts observations to Julia types).
 Managed by [CondaPkg.jl](https://github.com/JuliaPy/CondaPkg.jl) via
 `CondaPkg.toml` (conda-forge channel): `datasets`, `numpy`, `pillow`.
 
-- `datasets` is pinned to `>=3.0, <4`. Do **not** lower the floor below 3.0.
+- `datasets` is pinned to `>=4.0, <5`. Do **not** lower the floor below 4.0
+  (the lazy `Column` column-access path depends on datasets ≥ 4).
+- `python` is pinned to `<3.14` to avoid conda-forge's free-threaded (no-GIL)
+  CPython, which deadlocks PythonCall while importing `datasets`' C extensions.
 
 ## Running tests
 
@@ -48,14 +67,16 @@ using Pkg; Pkg.test()
 
 - Test deps live in `test/Project.toml` (`Test`, `ImageCore`, `PythonCall`);
   the root project declares `[workspace] projects = ["test", "docs"]`.
-- `test/runtests.jl` runs `dataset.jl` and `datasetdict.jl` always, and
-  `no_ci.jl` (larger downloads: cifar10, beans, cppe-5) **only when `CI` is
-  not `"true"`**. Set `ENV["CI"]="true"` to mimic CI and skip those.
+- `test/runtests.jl` runs `transforms.jl`, `dataset.jl`, `datasetdict.jl`,
+  `iterabledataset.jl`, and `iterabledatasetdict.jl` always (the last two stay
+  offline, building streams from in-memory data), and `no_ci.jl` (larger downloads:
+  cifar10, beans, cppe-5) **only when `CI` is not `"true"`**. Set `ENV["CI"]="true"`
+  to mimic CI and skip those.
 - The first run downloads datasets and provisions the conda env, so it is slow.
 
 ## Changelog
 
-Keep [`CHANGELOG.md`](CHANGELOG.md) up to date. It follows
+PRs should update [`CHANGELOG.md`](CHANGELOG.md). It follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project uses
 [Semantic Versioning](https://semver.org/).
 

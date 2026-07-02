@@ -91,7 +91,6 @@ folder.
 
 ## Troubleshooting
 
-- If you have problems resolving the CondaPkg environment, try setting
+If you have problems resolving the CondaPkg environment, try setting
   `ENV["JULIA_CONDAPKG_OPENSSL_VERSION"] = true` before loading the package. See more
   details [here](https://github.com/JuliaPy/CondaPkg.jl?tab=readme-ov-file#preferences).
-</content>

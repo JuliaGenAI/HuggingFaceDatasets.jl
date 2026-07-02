@@ -35,6 +35,10 @@ function py2jl(x::Py)
         return Dataset(x)
     elseif pyisinstance(x, datasets.DatasetDict)
         return DatasetDict(x)
+    elseif pyisinstance(x, datasets.IterableDataset)
+        return IterableDataset(x)
+    elseif pyisinstance(x, datasets.IterableDatasetDict)
+        return IterableDatasetDict(x)
     # handle datasets.Column (the lazy column view that `dataset[column_name]`
     # returns in datasets >= 4) by wrapping it in a lazy `Column` rather than
     # materializing it here
@@ -51,10 +55,16 @@ function py2jl(x::Py)
         return Set(py2jl(x) for x in x)
     # handle numpy arrays
     elseif pyisinstance(x, np.ndarray)
+        # A 0-d array is a scalar wearing an array's clothes — the numpy formatter tensorizes a
+        # plain scalar cell (e.g. the output of a `map` returning a Julia/Python scalar) to a
+        # 0-d `ndarray`. Unwrap to a native scalar via `.item()`, mirroring the `np.generic`
+        # branch below, so a scalar reads back as a scalar rather than a `fill(x)` 0-d array.
+        if pyconvert(Int, x.ndim) == 0
+            return py2jl(x.item())
         # DLPack (`numpy2jl`) only supports numeric dtypes. Non-numeric arrays (strings,
         # `object` arrays from ragged columns, datetimes, ...) fall back to a nested-list
         # conversion, so a string column still comes back as a `Vector{String}`.
-        if _is_dlpack_numeric(x)
+        elseif _is_dlpack_numeric(x)
             return numpy2jl(x)
         else
             return py2jl(x.tolist())
@@ -172,9 +182,11 @@ Python: (1, 'a', [2, 3])
 jl2py(x) = Py(x)
 jl2py(x::Py) = x
 
-jl2py(x::Dataset)     = getfield(x, :py)
-jl2py(x::DatasetDict) = getfield(x, :py)
-jl2py(x::Column)      = getfield(x, :py)
+jl2py(x::Dataset)             = getfield(x, :py)
+jl2py(x::DatasetDict)         = getfield(x, :py)
+jl2py(x::IterableDataset)     = getfield(x, :py)
+jl2py(x::IterableDatasetDict) = getfield(x, :py)
+jl2py(x::Column)              = getfield(x, :py)
 
 function jl2py(x::AbstractDict)
     d = pydict()

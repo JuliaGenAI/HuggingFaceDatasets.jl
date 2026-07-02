@@ -13,6 +13,8 @@ worked examples and background on the transform pipeline.
 ```@docs
 Dataset
 DatasetDict
+IterableDataset
+IterableDatasetDict
 Column
 ```
 
@@ -50,6 +52,10 @@ map(f, ::Dataset)
 filter(f, ::Dataset)
 map(f, ::DatasetDict)
 filter(f, ::DatasetDict)
+map(f, ::IterableDataset)
+filter(f, ::IterableDataset)
+map(f, ::IterableDatasetDict)
+filter(f, ::IterableDatasetDict)
 ```
 
 ## Type conversion
@@ -65,4 +71,3 @@ jl2numpy
 
 ```@index
 ```
-</content>
