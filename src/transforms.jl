@@ -172,6 +172,10 @@ Python: (1, 'a', [2, 3])
 jl2py(x) = Py(x)
 jl2py(x::Py) = x
 
+jl2py(x::Dataset)     = getfield(x, :py)
+jl2py(x::DatasetDict) = getfield(x, :py)
+jl2py(x::Column)      = getfield(x, :py)
+
 function jl2py(x::AbstractDict)
     d = pydict()
     for (k, v) in x

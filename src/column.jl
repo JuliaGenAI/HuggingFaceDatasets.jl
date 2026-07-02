@@ -41,17 +41,17 @@ julia> collect(col)
 ```
 """
 struct Column{T} <: AbstractVector{T}
-    pyobj::Py
+    py::Py
 end
 
-function Column(pyobj::Py)
-    n = pylen(pyobj)
-    T = n == 0 ? Any : typeof(py2jl(pyobj[0]))
-    return Column{T}(pyobj)
+function Column(py::Py)
+    n = pylen(py)
+    T = n == 0 ? Any : typeof(py2jl(py[0]))
+    return Column{T}(py)
 end
 
 # The underlying python `datasets.Column`.
-pyobj(c::Column) = getfield(c, :pyobj)
+pyobj(c::Column) = getfield(c, :py)
 
 Base.size(c::Column) = (pylen(pyobj(c)),)
 

@@ -40,6 +40,11 @@ export py2jl,
 include("load_dataset.jl")
 export load_dataset
 
+include("toplevel.jl")
+export concatenate_datasets,
+    interleave_datasets,
+    load_from_disk
+
 function __init__()
     # Since it is illegal in PythonCall to import a python module in a module, we need to do this here.
     # https://juliapy.github.io/PythonCall.jl/dev/pythoncall-reference/#PythonCall.Core.pycopy!

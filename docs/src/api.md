@@ -20,6 +20,17 @@ Column
 
 ```@docs
 load_dataset
+load_from_disk
+from_csv
+from_json
+from_parquet
+```
+
+## Combining
+
+```@docs
+concatenate_datasets
+interleave_datasets
 ```
 
 ## Formats and transforms
