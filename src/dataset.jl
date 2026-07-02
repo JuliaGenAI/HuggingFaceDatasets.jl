@@ -124,6 +124,45 @@ Dataset(d::AbstractDict; jltransform = nothing) =
 Dataset(nt::NamedTuple; jltransform = nothing) =
     _from_julia_data(_from_dict_pydict(nt), jltransform)
 
+"""
+    Dataset(table; jltransform = nothing)
+
+Build a `Dataset` from any [Tables.jl](https://github.com/JuliaData/Tables.jl)-compatible
+source — a `DataFrame`, `CSV.File`, row table, and so on. The table is materialized to a
+column `NamedTuple` with `Tables.columntable` and then handed to the `Dataset(::NamedTuple)`
+column path, so column-name order, scalar columns, and the default `"julia"` format all
+behave exactly as for in-memory columns. This avoids the pandas dependency that
+`datasets.Dataset.from_pandas` would pull in and covers far more sources.
+
+See also [`Dataset(::AbstractDict)`](@ref) and [`with_format`](@ref).
+
+# Examples
+
+```julia
+julia> using DataFrames
+
+julia> df = DataFrame(label = [5, 0, 4], text = ["a", "b", "c"]);
+
+julia> ds = Dataset(df)
+Dataset({
+    features: ['label', 'text'],
+    num_rows: 3
+})
+
+julia> ds[1:3]["label"]
+3-element Vector{Int64}:
+ 5
+ 0
+ 4
+```
+"""
+function Dataset(table; jltransform = nothing)
+    Tables.istable(table) || throw(ArgumentError(
+        "`Dataset(x)` expects a Tables.jl-compatible table, an `AbstractDict`, or a " *
+        "`NamedTuple` of columns; got a $(typeof(table)), which is not a table"))
+    return Dataset(Tables.columntable(table); jltransform)
+end
+
 # Wrap a freshly built `datasets.Dataset` from Julia data. With no explicit `jltransform`
 # the dataset defaults to the `"julia"` format; passing a transform installs it instead
 # (leaving the Python format untouched, i.e. observations arrive as raw Python batches).

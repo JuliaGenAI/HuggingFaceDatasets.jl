@@ -85,6 +85,26 @@ end
     @test_throws ArgumentError Dataset(Dict("x" => 5))
 end
 
+@testset "construct from a Tables.jl source" begin
+    # A row table (vector of NamedTuples) is Tables.jl-compatible and lands on the generic
+    # `Dataset(table)` method; it must match the equivalent column construction.
+    rt = [(label = 5, text = "a"), (label = 0, text = "b"), (label = 4, text = "c")]
+    ds = Dataset(rt)
+    @test length(ds) == 3
+    @test ds.column_names == ["label", "text"]
+    @test ds[1:3]["label"] == [5, 0, 4]
+    @test ds[1:3]["text"] == ["a", "b", "c"]
+    @test ds[1:3]["label"] == Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))[1:3]["label"]
+
+    # a custom `jltransform` is forwarded through the table path
+    ds = Dataset(rt; jltransform = py2jl)
+    @test ds.format["type"] === nothing
+    @test ds[1]["label"] == 5
+
+    # a non-table scalar is rejected with a clear error
+    @test_throws ArgumentError Dataset(5)
+end
+
 @testset "keyword arguments are forwarded to python methods" begin
     # `train_test_split` requires the `test_size` keyword: regression test for the
     # kwargs-forwarding bug where keywords were splatted as positional arguments.
