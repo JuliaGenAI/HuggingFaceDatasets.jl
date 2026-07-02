@@ -37,6 +37,17 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `BoundsError`, instead of `AssertionError` — update any code catching `AssertionError`.
 
 ### Added
+- `Serialization` support for `Dataset`: `Serialization.serialize`/`deserialize` now work,
+  so a `Dataset` can cross a process boundary — the prerequisite for process-parallel data
+  loaders (e.g. a `MLUtils.DataLoader(ds; num_workers=N)` that spreads `getobs` over worker
+  processes, where separate interpreters/GILs let Python reads scale in a way the shared-GIL
+  thread path cannot). It uses `datasets`' own pickle (the mechanism PyTorch relies on for
+  `DataLoader(num_workers>0)`): an on-disk dataset pickles to a small reference to its
+  memory-mapped Arrow `cache_files` and re-mmaps on the worker (data shared, not copied),
+  while an in-memory dataset is materialized to a temp Arrow dir once (fingerprint-cached).
+  Only the pickle bytes and the Julia transform cross the boundary — never a `Py`. Requires
+  a Julia-native read format (the default `"julia"`), a serializable `jltransform`, and a
+  shared filesystem across processes.
 - Streaming support: `load_dataset(...; streaming=true)` now returns an exported
   `IterableDataset` (with a `split`) or `IterableDatasetDict` (without one) instead of leaking
   a raw `Py`. `IterableDataset` is the lazy counterpart of `Dataset` — it is consumed by

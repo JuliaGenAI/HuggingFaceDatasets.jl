@@ -14,7 +14,7 @@ that lazily converts observations to Julia types).
 ## Layout
 
 - `src/HuggingFaceDatasets.jl` — module entry point. Holds the lazily-imported
-  Python module handles (`datasets`, `PIL`, `np`, `copy`), initialized in
+  Python module handles (`datasets`, `PIL`, `np`, `copy`, `pickle`), initialized in
   `__init__` via `PythonCall.pycopy!`. Python modules must be imported there,
   not at module top level (PythonCall restriction — see the comment in the file).
 - `src/dataset.jl` — `Dataset`, the wrapper over `datasets.Dataset`. 1-based
@@ -43,6 +43,11 @@ that lazily converts observations to Julia types).
   PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
   format is numpy-backed, so numeric array columns decode to real N-D Julia arrays
   and image columns decode to raw numeric arrays (not `Colorant` colorviews).
+- `src/serialization.jl` — `Serialization.serialize`/`deserialize` for `Dataset`,
+  so it can cross a process boundary (process-parallel data loaders). Never
+  serializes the wrapped `Py` directly; instead uses `datasets`' own pickle
+  (on-disk datasets pickle by reference to their mmapped Arrow `cache_files`;
+  in-memory ones are materialized to a temp Arrow dir once, fingerprint-cached).
 - `src/callable.jl`, `src/observation.jl` — small helpers (method forwarding to
   the wrapped Python object; `MLUtils` `getobs`/`numobs` integration).
 
