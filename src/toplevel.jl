@@ -104,7 +104,10 @@ forwarding to
 This is the read side of the `ds.save_to_disk(path)` method, closing the save/load asymmetry.
 
 The result is returned in the default `"julia"` format. Extra keyword arguments
-(`keep_in_memory`, `storage_options`, ...) are forwarded to Python.
+(`keep_in_memory`, `storage_options`, ...) are forwarded to Python. The Python classmethods
+are also available under their names: `Dataset.load_from_disk(path)` and
+`DatasetDict.load_from_disk(path)` load specifically a `Dataset` / `DatasetDict`, whereas this
+top-level `load_from_disk` auto-detects which one was saved.
 
 # Examples
 
@@ -130,34 +133,41 @@ load_from_disk(path::AbstractString; kws...) =
 # leaving the exported namespace to the `Dataset` constructor. `path_or_paths` may be a file
 # path, a vector of paths, or a mapping of split name to path; keyword arguments (`features`,
 # `cache_dir`, `keep_in_memory`, ...) are forwarded to Python, and the result comes back in
-# the default `"julia"` format.
+# the default `"julia"` format. They are also reachable under the Python classmethod name via
+# the type-level `getproperty` on `Dataset` (`Dataset.from_csv(path)` etc., see `dataset.jl`).
 
 """
     from_csv(path_or_paths; kws...)
+    Dataset.from_csv(path_or_paths; kws...)
 
 Build a [`Dataset`](@ref) from a CSV file (or files), forwarding to
-`datasets.Dataset.from_csv`. Public but not exported — call as
-`HuggingFaceDatasets.from_csv`. See also [`from_json`](@ref) and [`from_parquet`](@ref).
+`datasets.Dataset.from_csv`. Reachable both as the (public, not exported)
+`HuggingFaceDatasets.from_csv` and under the Python classmethod name `Dataset.from_csv`.
+See also [`from_json`](@ref) and [`from_parquet`](@ref).
 """
 from_csv(path_or_paths; kws...) =
     _wrap_toplevel(datasets.Dataset.from_csv(jl2py(path_or_paths); kws...))
 
 """
     from_json(path_or_paths; kws...)
+    Dataset.from_json(path_or_paths; kws...)
 
 Build a [`Dataset`](@ref) from a JSON / JSON Lines file (or files), forwarding to
-`datasets.Dataset.from_json`. Public but not exported — call as
-`HuggingFaceDatasets.from_json`. See also [`from_csv`](@ref) and [`from_parquet`](@ref).
+`datasets.Dataset.from_json`. Reachable both as the (public, not exported)
+`HuggingFaceDatasets.from_json` and under the Python classmethod name `Dataset.from_json`.
+See also [`from_csv`](@ref) and [`from_parquet`](@ref).
 """
 from_json(path_or_paths; kws...) =
     _wrap_toplevel(datasets.Dataset.from_json(jl2py(path_or_paths); kws...))
 
 """
     from_parquet(path_or_paths; kws...)
+    Dataset.from_parquet(path_or_paths; kws...)
 
 Build a [`Dataset`](@ref) from a Parquet file (or files), forwarding to
-`datasets.Dataset.from_parquet`. Public but not exported — call as
-`HuggingFaceDatasets.from_parquet`. See also [`from_csv`](@ref) and [`from_json`](@ref).
+`datasets.Dataset.from_parquet`. Reachable both as the (public, not exported)
+`HuggingFaceDatasets.from_parquet` and under the Python classmethod name `Dataset.from_parquet`.
+See also [`from_csv`](@ref) and [`from_json`](@ref).
 """
 from_parquet(path_or_paths; kws...) =
     _wrap_toplevel(datasets.Dataset.from_parquet(jl2py(path_or_paths); kws...))

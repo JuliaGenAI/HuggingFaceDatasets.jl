@@ -143,6 +143,19 @@ end
             @test loaded isa Dataset
             @test loaded.format["type"] == "numpy"   # default julia format
             @test loaded[:]["label"] == [1, 2]
+
+            # the Python classmethod name also works, via type-level getproperty
+            loaded = Dataset.load_from_disk(path)
+            @test loaded isa Dataset
+            @test loaded[:]["label"] == [1, 2]
+
+            # ... and on DatasetDict for a saved dict of splits
+            dpath = joinpath(dir, "dd")
+            DatasetDict("train" => a).py.save_to_disk(dpath)
+            dd = DatasetDict.load_from_disk(dpath)
+            @test dd isa DatasetDict
+            @test dd["train"][:]["label"] == [1, 2]
+            @test load_from_disk(dpath) isa DatasetDict     # top-level auto-detects
         end
     end
 
@@ -157,17 +170,23 @@ end
             @test ds.format["type"] == "numpy"
             @test ds[:]["label"] == [5, 0, 4]
             @test ds[:]["text"] == ["a", "b", "c"]
+            @test Dataset.from_csv(csv)[:]["label"] == [5, 0, 4]   # classmethod name
 
             json = joinpath(dir, "d.json")
             src.py.to_json(json)
-            ds = HuggingFaceDatasets.from_json(json)
-            @test ds[:]["label"] == [5, 0, 4]
+            @test HuggingFaceDatasets.from_json(json)[:]["label"] == [5, 0, 4]
+            @test Dataset.from_json(json)[:]["label"] == [5, 0, 4]
 
             parquet = joinpath(dir, "d.parquet")
             src.py.to_parquet(parquet)
-            ds = HuggingFaceDatasets.from_parquet(parquet)
-            @test ds[:]["label"] == [5, 0, 4]
+            @test HuggingFaceDatasets.from_parquet(parquet)[:]["label"] == [5, 0, 4]
+            @test Dataset.from_parquet(parquet)[:]["label"] == [5, 0, 4]
         end
+    end
+
+    @testset "type introspection unaffected by type-level getproperty" begin
+        @test fieldnames(Dataset) == (:py, :jltransform)
+        @test fieldnames(DatasetDict) == (:py, :jltransform, :splits)
     end
 
     @testset "jl2py unwraps the wrapper types" begin
