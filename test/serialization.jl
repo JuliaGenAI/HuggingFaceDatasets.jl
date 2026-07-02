@@ -1,4 +1,5 @@
 using Serialization: serialize, deserialize
+using Distributed
 
 # serialize → deserialize through an in-memory buffer (the same path `Distributed` uses to
 # ship a `Dataset` to a worker, minus the process hop). A worker read is exercised
@@ -34,4 +35,23 @@ end
     n0 = length(HuggingFaceDatasets._SAVE_CACHE)
     roundtrip(ds); roundtrip(ds)               # same content ⇒ a single on-disk copy
     @test length(HuggingFaceDatasets._SAVE_CACHE) == n0 + 1
+end
+
+# The actual cross-process path (serialize → ship to a worker → re-mmap → read there) needs
+# an extra worker process, each spinning up its own Python — too heavy for CI. It guards the
+# invariant that no `Py` crosses the boundary, which the in-process round-trips above cannot
+# catch (a stray `Py` round-trips fine within a single interpreter but segfaults across one).
+if !parse(Bool, get(ENV, "CI", "false"))
+    @testset "cross-process round-trip" begin
+        procs = addprocs(1; exeflags = "--project=$(dirname(Base.active_project()))")
+        try
+            @everywhere procs using HuggingFaceDatasets
+            ds = Dataset((; x = reshape(collect(1:8*20), 8, 20), label = collect(0:19)))
+            got = remotecall_fetch(d -> d[1:20], only(procs), ds)   # ds serialized to the worker
+            @test got["x"] == ds[1:20]["x"]
+            @test got["label"] == ds[1:20]["label"]
+        finally
+            rmprocs(procs)
+        end
+    end
 end

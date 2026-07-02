@@ -2,12 +2,14 @@
 HuggingFaceDatasets = {path = ".."}
 
 [deps]
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 HuggingFaceDatasets = "d94b9a45-fdf5-4270-b024-5cbb9ef7117d"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
+Distributed = "1"
 ImageCore = "0.9, 0.10"
 PythonCall = "0.9"
 
