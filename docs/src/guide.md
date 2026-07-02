@@ -37,7 +37,7 @@ julia> train = Dataset((; label=[1, 0, 1, 0]));
 
 julia> test = Dataset((; label=[1, 1]));
 
-julia> dd = DatasetDict(datasets.DatasetDict(pydict(train=train.py, test=test.py)))
+julia> dd = DatasetDict("train" => train, "test" => test)
 DatasetDict({
     train: Dataset({
         features: ['label'],

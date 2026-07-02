@@ -367,6 +367,12 @@ version of [`with_jltransform`](@ref).
 function set_jltransform!(ds::Dataset, transform)
     if transform === nothing
         ds.jltransform = identity
+    elseif transform isa AbstractDict
+        # A per-split transform spec (from a `DatasetDict`) propagated onto a single
+        # `Dataset` — rare, e.g. a forwarded method that returns a `Dataset`. Collapse to
+        # the common transform when unambiguous, otherwise fall back to `identity`.
+        transforms = unique(collect(values(transform)))
+        ds.jltransform = length(transforms) == 1 ? only(transforms) : identity
     else
         ds.jltransform = transform
     end
