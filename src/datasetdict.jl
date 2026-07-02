@@ -128,11 +128,15 @@ function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
     return d2
 end
 
-# Shallow copy: the returned dict shares the underlying Arrow data with `d`
-# but has an independent format, so `set_format!`/`set_jltransform!` on the copy
-# do not affect the original. Used internally by the copy-on-write helpers.
+# Shallow copy: the returned dict shares the underlying Arrow data with `d` but has an
+# independent format, so `set_format!`/`set_jltransform!` on the copy do not affect the
+# original. `copy.copy` on the `DatasetDict` alone would share the *child* `Dataset`
+# objects (and hence their format state), so shallow-copy each split individually.
 function Base.copy(d::DatasetDict)
-    py = pycopy.copy(getfield(d, :py))
+    py = datasets.DatasetDict()
+    for (k, v) in getfield(d, :py).items()
+        py[k] = pycopy.copy(v)
+    end
     return DatasetDict(py, getfield(d, :jltransform))
 end
 
@@ -196,7 +200,7 @@ version of [`with_format`](@ref).
 """
 function set_format!(d::DatasetDict, format)
     if format == "julia"
-        d.py.reset_format()
+        d.py.set_format("numpy")
         d.jltransform = py2jl
     else
         d.py.set_format(format)
@@ -210,10 +214,7 @@ set_format!(d::DatasetDict) = reset_format!(d)
 """
     reset_format!(d::DatasetDict)
 
-Reset the format of `d`, removing any python format and julia transform.
+Reset `d` to the default `"julia"` format, i.e. `set_format!(d, "julia")`. To instead
+strip all formatting and get raw Python observations, use `set_format!(d, nothing)`.
 """
-function reset_format!(d::DatasetDict)
-    d.py.set_format(nothing)
-    d.jltransform = identity
-    return d
-end
+reset_format!(d::DatasetDict) = set_format!(d, "julia")

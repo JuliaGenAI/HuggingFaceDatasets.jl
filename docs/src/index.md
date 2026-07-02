@@ -20,8 +20,9 @@ The package wraps the Python `datasets.Dataset` and `datasets.DatasetDict` types
 - forwards every method of the underlying Python object, so the full `datasets` API
   (`map`, `filter`, `shuffle`, `train_test_split`, `cast_column`, …) is available;
 - uses 1-based indexing, Julia iteration, and other Julia conventions;
-- offers a lazy `"julia"` format that converts observations to native Julia types
-  (arrays, images, dictionaries) on access, copylessly when possible.
+- returns observations in a lazy `"julia"` format by default, converting them to native
+  Julia types (numeric N-D arrays, dictionaries, ...) on access, copylessly when possible,
+  and stacking array columns into `(dims…, N)` tensors.
 
 It is built on top of [PythonCall.jl](https://github.com/JuliaPy/PythonCall.jl).
 
@@ -40,8 +41,9 @@ loaded; no manual Python setup is required.
 
 ## Quickstart
 
-Fetch a dataset from the Hub with [`load_dataset`](@ref) and index into it. By default
-observations are returned as Python objects:
+Fetch a dataset from the Hub with [`load_dataset`](@ref) and index into it. Observations
+are returned in the `"julia"` format by default, so they are lazily converted to native
+Julia types (dictionaries, numeric arrays, ...) on access:
 
 ```julia
 julia> using HuggingFaceDatasets
@@ -52,35 +54,37 @@ Dataset({
     num_rows: 60000
 })
 
-julia> train_data[1]
-Python: {'image': <PIL.PngImagePlugin.PngImageFile image mode=L size=28x28 at 0x3340B0290>, 'label': 5}
+julia> train_data[1]["label"]
+5
+
+julia> train_data[1]["image"]           # a raw (W, H) numeric array (see the Guide)
+28×28 Matrix{UInt8}:
+[...]
 ```
 
-Apply the `"julia"` format to have observations converted to native Julia types
-(dictionaries, arrays, images) on access. The example below builds a small dataset in
-memory so it is reproducible, but the same applies to any dataset from the Hub:
+The same applies to an in-memory dataset, which is handy for reproducible examples:
 
 ```jldoctest
 julia> using HuggingFaceDatasets, PythonCall
 
 julia> ds = Dataset((; label=[5, 0, 4]));
 
-julia> ds[1]                            # a Python object by default
-Python: {'label': 5}
-
-julia> ds = ds.with_format("julia");    # convert observations to Julia types
-
-julia> ds[1]
+julia> ds[1]                            # native Julia value by default
 Dict{String, Int64} with 1 entry:
   "label" => 5
 
 julia> ds[1:3]                          # a batch: each column becomes a vector
 Dict{String, Vector{Int64}} with 1 entry:
   "label" => [5, 0, 4]
+
+julia> set_format!(ds, nothing);        # opt out: raw Python observations
+
+julia> ds[1]
+Python: {'label': 5}
 ```
 
-See the [Guide](@ref) for the transform workflow, method forwarding, the array/image
-orientation caveat, and integration with MLUtils/Flux data loaders. Runnable examples
+See the [Guide](@ref) for the transform workflow, method forwarding, array/image
+orientation, and integration with MLUtils/Flux data loaders. Runnable examples
 live in the
 [`examples/`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/examples)
 folder.
