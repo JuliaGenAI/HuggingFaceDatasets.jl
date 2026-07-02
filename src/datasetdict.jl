@@ -1,15 +1,25 @@
 """
-    DatasetDict(py::Py, jltransform = identity)
+    DatasetDict(splits::AbstractDict{<:AbstractString, Dataset})
+    DatasetDict(splits::Pair{<:AbstractString, Dataset}...)
 
 A `DatasetDict` is a dictionary of `Dataset`s.
 It is a wrapper around a `datasets.DatasetDict` object.
 
-The `jltransform` is applied to each [`Dataset`](@ref).
-The [`py2jl`](@ref) transform provided by this package
-converts python types to julia types.
+A julia transform is stored **per split**: indexing a split (`dd["train"]`) hands back a
+[`Dataset`](@ref) carrying that split's transform. The [`py2jl`](@ref) transform provided
+by this package converts python types to julia types. Use [`set_jltransform!`](@ref) /
+[`with_jltransform`](@ref) with a single callable to set every split at once, or with an
+`AbstractDict` to set a different transform per split. [`set_format!`](@ref) /
+[`reset_format!`](@ref) act on all splits.
 
 A `DatasetDict` is an `AbstractDict{String, Dataset}`, so `keys`, `values`, `haskey`,
 `get`, and iteration work as expected.
+
+The constructors build a `DatasetDict` from in-memory Julia data — a mapping of split names
+to [`Dataset`](@ref)s, given either as an `AbstractDict` or as `name => dataset` pairs. Each
+split inherits its source `Dataset`'s own transform (so a dict built from `Dataset((; ...))`s
+is in the `"julia"` format, the `Dataset` default); change them afterwards with
+[`set_jltransform!`](@ref) or [`set_format!`](@ref). The source `Dataset`s are not mutated.
 
 See also [`load_dataset`](@ref) and [`Dataset`](@ref).
 
@@ -20,7 +30,7 @@ julia> train = Dataset((; label=[1, 0, 1, 0]));
 
 julia> test = Dataset((; label=[1, 1]));
 
-julia> dd = DatasetDict(datasets.DatasetDict(pydict(train=train.py, test=test.py)))
+julia> dd = DatasetDict("train" => train, "test" => test)
 DatasetDict({
     train: Dataset({
         features: ['label'],
@@ -49,14 +59,55 @@ false
 """
 mutable struct DatasetDict <: AbstractDict{String, Dataset}
     py::Py
-    jltransform
+    jltransform::Dict{String, Any}   # per-split julia transforms, one entry per split
 
     function DatasetDict(pydatasetdict::Py, jltransform = identity)
         if !pyisinstance(pydatasetdict, datasets.DatasetDict)
             throw(ArgumentError("expected a `datasets.DatasetDict`, got $(pytype(pydatasetdict))"))
         end
-        return new(pydatasetdict, jltransform)
+        return new(pydatasetdict, _jltransform_dict(pydatasetdict, jltransform))
     end
+end
+
+# Normalize a transform specification into a per-split `Dict` with one entry per split of
+# `py`. A `nothing`/callable spec is broadcast to every split (`nothing` -> `identity`); an
+# `AbstractDict` spec is applied per split (keys stringified), with any split it omits
+# defaulting to `identity`.
+function _jltransform_dict(py::Py, spec)
+    ks = String[pyconvert(String, k) for k in py.keys()]
+    if spec isa AbstractDict
+        byname = Dict{String,Any}(String(k) => v for (k, v) in spec)
+        return Dict{String,Any}(k => get(byname, k, identity) for k in ks)
+    else
+        t = spec === nothing ? identity : spec
+        return Dict{String,Any}(k => t for k in ks)
+    end
+end
+
+# The julia transform to record for a split supplied as a `Dataset` (its own transform) or
+# a raw `Py` (none).
+_jltransform_of(v::Dataset) = getfield(v, :jltransform)
+_jltransform_of(::Py) = identity
+
+DatasetDict(splits::AbstractDict{<:AbstractString, Dataset}) = _from_julia_splits(splits)
+
+DatasetDict(splits::Pair{<:AbstractString, Dataset}...) = _from_julia_splits(splits)
+
+# Build a `DatasetDict` from a mapping of split name to `Dataset`, mirroring `Dataset`'s
+# from-Julia-data constructors. Each split's underlying Python dataset is shallow-copied
+# (independent format state, shared Arrow data) so the result does not mutate the source
+# `Dataset`s, and each split inherits its source's own julia transform (so a dict built
+# from `Dataset((; ...))`s is in the `"julia"` format). Change the transforms afterwards
+# with `set_jltransform!`/`set_format!`.
+function _from_julia_splits(splits)
+    py = datasets.DatasetDict()
+    spec = Dict{String,Any}()
+    for (k, v) in splits
+        ks = String(k)
+        py[ks] = pycopy.copy(_py(v))
+        spec[ks] = _jltransform_of(v)
+    end
+    return DatasetDict(py, spec)
 end
 
 function Base.getproperty(d::DatasetDict, s::Symbol)
@@ -78,7 +129,7 @@ Base.length(d::DatasetDict) = length(d.py)
 
 function Base.getindex(d::DatasetDict, i::AbstractString)
     x = d.py[i]
-    return Dataset(x, d.jltransform)
+    return Dataset(x, get(d.jltransform, i, identity))
 end
 
 Base.keys(d::DatasetDict) = String[pyconvert(String, k) for k in d.py.keys()]
@@ -96,27 +147,32 @@ Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
 # values are always `Dataset`s, so `None` unambiguously means "absent".
 function Base.get(d::DatasetDict, k::AbstractString, default)
     x = d.py.get(k, nothing)
-    return pyis(x, pybuiltins.None) ? default : Dataset(x, d.jltransform)
+    return pyis(x, pybuiltins.None) ? default : Dataset(x, get(d.jltransform, k, identity))
 end
 
 # The generic `AbstractDict` `merge`/`filter` build the result with `empty(d)`, which
 # returns a plain `Dict` and drops the wrapper. Override them to return a `DatasetDict`
-# backed by a fresh `datasets.DatasetDict`, preserving `d`'s `jltransform`.
+# backed by a fresh `datasets.DatasetDict`. Each surviving split keeps its own transform
+# (captured from the `Dataset` value), so per-split transforms are preserved; for `merge`,
+# later dicts win for both the data and the transform, mirroring `Base.merge`.
 _py(v::Dataset) = getfield(v, :py)
 _py(v::Py) = v
 
-function _wrap_pairs(itr, jltransform)
+function _wrap_pairs(itr)
     py = datasets.DatasetDict()
+    spec = Dict{String,Any}()
     for (k, v) in itr
-        py[String(k)] = _py(v)
+        ks = String(k)
+        py[ks] = _py(v)
+        spec[ks] = _jltransform_of(v)
     end
-    return DatasetDict(py, jltransform)
+    return DatasetDict(py, spec)
 end
 
-Base.filter(f, d::DatasetDict) = _wrap_pairs(Iterators.filter(f, pairs(d)), d.jltransform)
+Base.filter(f, d::DatasetDict) = _wrap_pairs(Iterators.filter(f, pairs(d)))
 
 function Base.merge(d::DatasetDict, others::AbstractDict...)
-    return _wrap_pairs(Iterators.flatten((pairs(d), map(pairs, others)...)), d.jltransform)
+    return _wrap_pairs(Iterators.flatten((pairs(d), map(pairs, others)...)))
 end
 
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
@@ -152,6 +208,10 @@ Base.show(io::IO, ::MIME"text/plain", ds::DatasetDict) = print(io, ds.py)
     with_jltransform(transform, d::DatasetDict)
 
 Return a copy of `d` with the julia `transform` applied to each [`Dataset`](@ref).
+
+`transform` may be a single callable (or `nothing`), applied to every split, or an
+`AbstractDict` mapping split names to per-split transforms (splits it omits fall back to
+`identity`).
 """
 function with_jltransform(d::DatasetDict, transform)
     d = copy(d)
@@ -165,15 +225,15 @@ with_jltransform(transform, d::DatasetDict) = with_jltransform(d, transform)
     set_jltransform!(d::DatasetDict, transform)
     set_jltransform!(transform, d::DatasetDict)
 
-Set the transform of `d` to `transform`. Mutating 
+Set the transform of `d` to `transform`. Mutating
 version of [`with_jltransform`](@ref).
+
+`transform` may be a single callable (or `nothing`), applied to every split, or an
+`AbstractDict` mapping split names to per-split transforms (splits it omits fall back to
+`identity`).
 """
 function set_jltransform!(d::DatasetDict, transform)
-    if transform === nothing
-        d.jltransform = identity
-    else
-        d.jltransform = transform
-    end
+    d.jltransform = _jltransform_dict(d.py, transform)
     return d
 end
 
@@ -201,10 +261,10 @@ version of [`with_format`](@ref).
 function set_format!(d::DatasetDict, format)
     if format == "julia"
         d.py.set_format("numpy")
-        d.jltransform = py2jl
+        d.jltransform = _jltransform_dict(d.py, py2jl)
     else
         d.py.set_format(format)
-        d.jltransform = identity
+        d.jltransform = _jltransform_dict(d.py, identity)
     end
     return d
 end

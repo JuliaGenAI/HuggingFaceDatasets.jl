@@ -22,6 +22,63 @@ mnist = load_dataset("ylecun/mnist")
     @test Set(k for (k, v) in mnist) == Set(["train", "test"])
 end
 
+@testset "construction from Julia data" begin
+    train = Dataset((; label=[1, 0, 1, 0]))
+    test  = Dataset((; label=[1, 1]))
+
+    dd = DatasetDict("train" => train, "test" => test)      # Pair varargs
+    @test dd isa DatasetDict
+    @test Set(keys(dd)) == Set(["train", "test"])
+    @test dd["train"] isa Dataset
+    @test length(dd["train"]) == 4
+
+    dd2 = DatasetDict(Dict("train" => train, "test" => test))  # AbstractDict
+    @test Set(keys(dd2)) == Set(["train", "test"])
+
+    # each split keeps its source `Dataset`'s transform: `Dataset((;...))` is julia by
+    # default, so observations come back as native Julia values
+    @test dd["train"][1] == Dict("label" => 1)
+    @test dd["train"].format["type"] == "numpy"
+
+    # per split: a julia source stays julia, a raw source stays raw
+    raw = set_format!(Dataset((; label=[5, 0, 4])), nothing)
+    @test raw.format["type"] === nothing
+    mixed = DatasetDict("j" => train, "r" => raw)
+    @test mixed["j"][1] == Dict("label" => 1)   # julia split -> Julia Dict
+    @test mixed["r"][1] isa Py                   # raw split   -> raw Python
+
+    # copy-on-write: changing the dict's format must not mutate the source `Dataset`
+    built = DatasetDict("t" => train)
+    set_format!(built, nothing)
+    @test built["t"][1] isa Py
+    @test train.format["type"] == "numpy"        # source untouched
+
+    # the public constructors take no `jltransform` kwarg (it is derived from the splits)
+    @test_throws MethodError DatasetDict("train" => train; jltransform = identity)
+end
+
+@testset "per-split jltransform" begin
+    # range indexing returns the transform's output directly, so a constant-returning
+    # transform is an unambiguous marker of which transform ran on which split
+    dd = DatasetDict("a" => Dataset((; x=[1, 2, 3])), "b" => Dataset((; x=[4, 5])))
+
+    # a Dict sets a different transform per split; omitted splits fall back to identity
+    set_jltransform!(dd, Dict("a" => (o -> "TA")))
+    @test dd["a"][1:3] == "TA"                     # split "a" uses its transform
+    @test dd["b"][1:2] isa Py                      # "b" omitted -> identity -> raw batch
+
+    # with_jltransform accepts a per-split dict and does not mutate the original
+    dd4 = with_jltransform(dd, Dict("a" => (o -> "X"), "b" => (o -> "Y")))
+    @test dd4["a"][1:3] == "X"
+    @test dd4["b"][1:2] == "Y"
+    @test dd["a"][1:3] == "TA"                     # original unchanged
+
+    # a single callable still broadcasts to every split
+    set_jltransform!(dd, o -> "SAME")
+    @test dd["a"][1:3] == "SAME"
+    @test dd["b"][1:2] == "SAME"
+end
+
 @testset "display mirrors python repr" begin
     # `text/plain` show should match the Python `datasets.DatasetDict` repr, not the
     # generic `AbstractDict` multi-line display.
