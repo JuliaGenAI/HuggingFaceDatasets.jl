@@ -225,29 +225,17 @@ the copy does not affect the original.
 ## Transforming with `map` and `filter`
 
 `map` and `filter` are the core `datasets` verbs for building a new dataset from an
-existing one. Both are available in two flavours.
-
-The **forwarded Python methods** `ds.map(...)` / `ds.filter(...)` (see
-[Method forwarding](@ref) above) behave exactly as in Python: the callback receives raw
-`Py` rows or batches and must return Python-compatible values, so you write it in
-"PythonCall dialect" (`pyconvert` on the way in, `pylist`/`pydict` on the way out):
-
-```julia-repl
-julia> ds = Dataset((; label=[5, 0, 4]));
-
-julia> ds.map(x -> pydict(label=pylist([pyconvert(Int, l) + 100 for l in x["label"]])),
-              batched=true);          # written against the Python API
-```
-
-The **Julia-friendly overloads** [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridge
-the callback for you: each example (or batch, with `batched=true`) is converted with
+existing one. The overloads [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridge the
+callback for you: each example (or batch, with `batched=true`) is converted with
 [`py2jl`](@ref) before `f` sees it, and `f`'s Julia return value is converted back to
 Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). You can therefore write a
 pure-Julia transform while still getting `datasets`' batching, caching, and
 multiprocessing:
 
 ```julia-repl
-julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);   # ds is julia-formatted
+julia> ds = Dataset((; label=[5, 0, 4]));
+
+julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);
 
 julia> ds2[1:3]["label"]
 3-element Vector{Int64}:
@@ -263,6 +251,12 @@ julia> ds3[:]["label"]
  4
 ```
 
+The property-style calls `ds.map(f)` / `ds.filter(f)` are **equivalent** to `map(f, ds)` /
+`filter(f, ds)` — they route to these same overloads, so the callback still sees Julia values.
+A [`DatasetDict`](@ref) behaves the same way: `map(f, dd)` / `dd.map(f)` and `filter(f, dd)` /
+`dd.filter(f)` apply `f` per example across every split (note this makes `filter(f, dd)` filter
+*examples*, not split entries).
+
 A few things to note:
 
 - **Batched or not.** Without `batched=true` the callback sees one example at a time (a
@@ -275,8 +269,14 @@ A few things to note:
 - **Format is preserved.** The returned `Dataset` inherits the parent's `"julia"` format
   (or any custom `jltransform`), so `ds2` above is still `"julia"`-formatted and a chained
   pipeline like `map(f, dsj) |> ...` keeps returning Julia values.
-- **Reach for the Python method** with `ds.map(...)` whenever you specifically want to
-  hand `map`/`filter` a raw Python callback instead.
+- **Raw Python callbacks.** To hand `map`/`filter` a callback written in "PythonCall
+  dialect" (receiving raw `Py` rows/batches, `pyconvert` in, `pylist`/`pydict` out), reach
+  for the underlying Python method with `ds.py.map(...)` / `ds.py.filter(...)`:
+
+  ```julia-repl
+  julia> ds.py.map(x -> pydict(label=pylist([pyconvert(Int, l) + 100 for l in x["label"]])),
+                   batched=true);      # written against the Python API
+  ```
 
 ## Array orientation
 

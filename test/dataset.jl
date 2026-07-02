@@ -230,6 +230,54 @@ end
     @test ds.format["type"] === nothing
 end
 
+@testset "property-style format methods (python interface)" begin
+    # `ds.with_format`/`ds.set_format`/`ds.reset_format` route to this package's methods
+    # (not raw Python forwarding), so the `"julia"` pseudo-format works through them and
+    # stays consistent with the function forms.
+    ds = deepcopy(mnist)
+    set_format!(ds, nothing)
+    @test ds.format["type"] === nothing
+
+    ds.set_format("julia")                       # would error if forwarded to Python
+    @test ds.format["type"] == "numpy"           # julia format is numpy-backed
+    @test ds[1] isa Dict && ds[1]["label"] == 7
+
+    set_format!(ds, nothing)
+    ds.reset_format()                            # restores julia, not Python's strip-to-raw
+    @test ds.format["type"] == "numpy"
+    @test ds[1] isa Dict
+
+    dsj = ds.with_format("julia")                # non-mutating; returns a wrapped Dataset
+    @test dsj isa Dataset
+    @test dsj[1]["label"] == 7
+end
+
+@testset "Dataset.from_dict (python classmethod name)" begin
+    # `Dataset.from_dict` mirrors `datasets.Dataset.from_dict` via type-level getproperty,
+    # matching the `Dataset(data)` constructor (orientation-aware columns, "julia" format).
+    ds = Dataset.from_dict(Dict("label" => [5, 0, 4]))
+    @test ds isa Dataset
+    @test ds.format["type"] == "numpy"           # default julia format, like the constructor
+    @test ds[1] == Dict("label" => 5)
+    @test ds[1:3]["label"] == [5, 0, 4]
+
+    # NamedTuple input, and parity with the `Dataset(data)` constructor
+    @test Dataset.from_dict((; label = [5, 0, 4]))[1:3]["label"] == Dataset((; label = [5, 0, 4]))[1:3]["label"]
+
+    # N-D array column uses the same last-axis stacking as the constructor
+    m = [1 2 3; 4 5 6]
+    a = Dataset.from_dict((; x = m))
+    @test a[1]["x"] == [1, 4]
+    @test a[1:3]["x"] == m
+
+    # a raw Python mapping is accepted too (converted via jl2py)
+    c = Dataset.from_dict(pydict(Dict("label" => pylist([10, 20]))))
+    @test c[2]["label"] == 20
+
+    # type introspection is unaffected by the type-level getproperty overload
+    @test fieldnames(Dataset) == (:py, :jltransform)
+end
+
 @testset "jltransform always acts on batches" begin
     ds = with_jltransform(mnist) do x
         x = py2jl(x)
@@ -290,4 +338,14 @@ end
     ds5 = filter(x -> x["label"] .< 3, dsj; batched=true)
     @test ds5[1] isa Dict{String, Int64}
     @test sort(ds5[1:length(ds5)]["label"]) == [0, 1, 2]
+
+    # property-style `ds.map` / `ds.filter` route to the julia-bridged versions above
+    # (python interface), i.e. `ds.map(f)` == `map(f, ds)` — the callback still sees Julia
+    # values. A raw Python callback would go through `ds.py.map(...)` instead.
+    dm = dsj.map(x -> Dict("label" => x["label"] .+ 100); batched=true)
+    @test dm isa Dataset
+    @test dm[1:6]["label"] == [105, 100, 104, 103, 102, 101]
+    df = dsj.filter(x -> x["label"] > 2)
+    @test df isa Dataset
+    @test sort(df[1:length(df)]["label"]) == [3, 4, 5]
 end

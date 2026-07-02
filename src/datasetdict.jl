@@ -60,21 +60,30 @@ false
 mutable struct DatasetDict <: AbstractDict{String, Dataset}
     py::Py
     jltransform::Dict{String, Any}   # per-split julia transforms, one entry per split
+    # Cached, ordered split names. `keys`/`length`/iteration read this instead of calling into
+    # Python, so they stay allocation-cheap AND safe to call from contexts where a Python call
+    # would crash — notably the REPL's async tab-completion (`d[<TAB>` calls `keys`/`length` on
+    # a task where invoking libpython segfaults). Splits are immutable for a `DatasetDict`
+    # (methods that change them return a freshly-wrapped one), so the cache never goes stale.
+    splits::Vector{String}
 
     function DatasetDict(pydatasetdict::Py, jltransform = identity)
         if !pyisinstance(pydatasetdict, datasets.DatasetDict)
             throw(ArgumentError("expected a `datasets.DatasetDict`, got $(pytype(pydatasetdict))"))
         end
-        return new(pydatasetdict, _jltransform_dict(pydatasetdict, jltransform))
+        splits = _split_names(pydatasetdict)
+        return new(pydatasetdict, _jltransform_dict(splits, jltransform), splits)
     end
 end
 
-# Normalize a transform specification into a per-split `Dict` with one entry per split of
-# `py`. A `nothing`/callable spec is broadcast to every split (`nothing` -> `identity`); an
-# `AbstractDict` spec is applied per split (keys stringified), with any split it omits
-# defaulting to `identity`.
-function _jltransform_dict(py::Py, spec)
-    ks = String[pyconvert(String, k) for k in py.keys()]
+# Ordered split names of a `datasets.DatasetDict`, read from Python.
+_split_names(py::Py) = String[pyconvert(String, k) for k in py.keys()]
+
+# Normalize a transform specification into a per-split `Dict` with one entry per split (given
+# by the split names `ks`). A `nothing`/callable spec is broadcast to every split (`nothing`
+# -> `identity`); an `AbstractDict` spec is applied per split (keys stringified), with any
+# split it omits defaulting to `identity`.
+function _jltransform_dict(ks::AbstractVector{<:AbstractString}, spec)
     if spec isa AbstractDict
         byname = Dict{String,Any}(String(k) => v for (k, v) in spec)
         return Dict{String,Any}(k => get(byname, k, identity) for k in ks)
@@ -83,6 +92,9 @@ function _jltransform_dict(py::Py, spec)
         return Dict{String,Any}(k => t for k in ks)
     end
 end
+
+# Convenience for callers that only have the Python object (e.g. `set_format!`).
+_jltransform_dict(py::Py, spec) = _jltransform_dict(_split_names(py), spec)
 
 # The julia transform to record for a split supplied as a `Dataset` (its own transform) or
 # a raw `Py` (none).
@@ -110,35 +122,61 @@ function _from_julia_splits(splits)
     return DatasetDict(py, spec)
 end
 
-function Base.getproperty(d::DatasetDict, s::Symbol)
-    if s in fieldnames(DatasetDict)
-        return getfield(d, s)
-    elseif s === :with_format
-        return format -> with_format(d, format)
+# Property names on a `DatasetDict` routed to this package's own methods instead of being
+# forwarded to Python: the format methods (which understand the `"julia"` pseudo-format) and
+# the julia-bridged `map`/`filter`, which both act per example over every split. `d.map(f)` is
+# `map(f, d)` and `d.filter(f)` is `filter(f, d)` (see below). To hand a raw Python callback,
+# use `d.py.map(...)` / `d.py.filter(...)`.
+function _method_override(d::DatasetDict, s::Symbol)
+    if s === :with_format
+        return (args...; kws...) -> with_format(d, args...; kws...)
+    elseif s === :set_format
+        return (args...; kws...) -> set_format!(d, args...; kws...)
+    elseif s === :reset_format
+        return (args...; kws...) -> reset_format!(d, args...; kws...)
+    elseif s === :map
+        return (f; kws...) -> map(f, d; kws...)
+    elseif s === :filter
+        return (f; kws...) -> filter(f, d; kws...)
     else
-        res = getproperty(getfield(d, :py), s)
-        if pycallable(res)
-            return CallableWrapper(res, getfield(d, :jltransform))
-        else
-            return res |> py2jl
-        end
+        return nothing
     end
 end
 
-Base.length(d::DatasetDict) = length(d.py)
+function Base.getproperty(d::DatasetDict, s::Symbol)
+    if s in fieldnames(DatasetDict)
+        return getfield(d, s)
+    end
+    # Route the format methods to this package's own versions (see `_method_override`) so the
+    # Python-style `d.with_format(...)`/`d.set_format(...)`/`d.reset_format()` calls handle the
+    # `"julia"` format; every other name forwards to the wrapped Python object.
+    override = _method_override(d, s)
+    override === nothing || return override
+    res = getproperty(getfield(d, :py), s)
+    if pycallable(res)
+        return CallableWrapper(res, getfield(d, :jltransform))
+    else
+        return res |> py2jl
+    end
+end
+
+# `length`/`keys`/`haskey` answer from the cached `splits` (no Python call): correct because
+# splits are immutable, and required so the REPL's async `d[<TAB>` completion — which calls
+# `keys`/`length` — does not invoke libpython off the main task and segfault.
+Base.length(d::DatasetDict) = length(getfield(d, :splits))
 
 function Base.getindex(d::DatasetDict, i::AbstractString)
     x = d.py[i]
     return Dataset(x, get(d.jltransform, i, identity))
 end
 
-Base.keys(d::DatasetDict) = String[pyconvert(String, k) for k in d.py.keys()]
+Base.keys(d::DatasetDict) = getfield(d, :splits)
 
 Base.values(d::DatasetDict) = Dataset[d[k] for k in keys(d)]
 
 Base.pairs(d::DatasetDict) = Pair{String,Dataset}[k => d[k] for k in keys(d)]
 
-Base.haskey(d::DatasetDict, k::AbstractString) = pyconvert(Bool, pyin(k, d.py))
+Base.haskey(d::DatasetDict, k::AbstractString) = k in getfield(d, :splits)
 
 Base.iterate(d::DatasetDict, state...) = iterate(pairs(d), state...)
 
@@ -150,11 +188,11 @@ function Base.get(d::DatasetDict, k::AbstractString, default)
     return pyis(x, pybuiltins.None) ? default : Dataset(x, get(d.jltransform, k, identity))
 end
 
-# The generic `AbstractDict` `merge`/`filter` build the result with `empty(d)`, which
-# returns a plain `Dict` and drops the wrapper. Override them to return a `DatasetDict`
-# backed by a fresh `datasets.DatasetDict`. Each surviving split keeps its own transform
-# (captured from the `Dataset` value), so per-split transforms are preserved; for `merge`,
-# later dicts win for both the data and the transform, mirroring `Base.merge`.
+# The generic `AbstractDict` `merge` builds the result with `empty(d)`, which returns a plain
+# `Dict` and drops the wrapper. Override it to return a `DatasetDict` backed by a fresh
+# `datasets.DatasetDict`. Each split keeps its own transform (captured from the `Dataset`
+# value); later dicts win for both the data and the transform, mirroring `Base.merge`.
+# (`filter` is not an `AbstractDict`-style override here — see `Base.filter` below.)
 _py(v::Dataset) = getfield(v, :py)
 _py(v::Py) = v
 
@@ -169,10 +207,48 @@ function _wrap_pairs(itr)
     return DatasetDict(py, spec)
 end
 
-Base.filter(f, d::DatasetDict) = _wrap_pairs(Iterators.filter(f, pairs(d)))
-
 function Base.merge(d::DatasetDict, others::AbstractDict...)
     return _wrap_pairs(Iterators.flatten((pairs(d), map(pairs, others)...)))
+end
+
+"""
+    map(f, d::DatasetDict; kws...)
+
+Apply `f` to every example of every split of `d` through `datasets`' `DatasetDict.map`,
+bridging Julia values on both sides just like the [`Dataset`](@ref) version: each example (or
+batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f`'s
+return value is converted back with [`jl2py`](@ref). Keyword arguments are forwarded to the
+Python `map`, and each split keeps its own julia format/transform.
+
+`d.map(f; ...)` is equivalent to this `map(f, d; ...)`; use `d.py.map(...)` for a raw Python
+callback.
+
+See also [`filter`](@ref).
+"""
+function Base.map(f, d::DatasetDict; kws...)
+    g = x -> jl2py(f(py2jl(x)))
+    y = getfield(d, :py).map(g; kws...)
+    return DatasetDict(y, getfield(d, :jltransform))
+end
+
+"""
+    filter(f, d::DatasetDict; kws...)
+
+Filter every split of `d` by the Julia predicate `f`, applied per example (Python's
+`DatasetDict.filter`), bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) exactly as
+[`map`](@ref) does. Returns a `DatasetDict` with the same splits, each keeping its own julia
+format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`.
+
+!!! note
+    This deliberately overrides the generic `AbstractDict` `filter` (which would filter split
+    *entries*): `filter(f, ::DatasetDict)` filters *examples* within every split, to match
+    Python and the property-style `d.filter(f)`. To select splits, index the `DatasetDict` or
+    build a new one explicitly.
+"""
+function Base.filter(f, d::DatasetDict; kws...)
+    g = x -> jl2py(f(py2jl(x)))
+    y = getfield(d, :py).filter(g; kws...)
+    return DatasetDict(y, getfield(d, :jltransform))
 end
 
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)

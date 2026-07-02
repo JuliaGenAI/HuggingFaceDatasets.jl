@@ -37,6 +37,8 @@ set_jltransform!
 ```@docs
 map(f, ::Dataset)
 filter(f, ::Dataset)
+map(f, ::DatasetDict)
+filter(f, ::DatasetDict)
 ```
 
 ## Type conversion
