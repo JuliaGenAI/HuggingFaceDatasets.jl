@@ -5,3 +5,8 @@ datasets = ">=4.0, <5"
 numpy = ""
 pillow = ""
 
+# Avoid conda-forge's free-threaded (no-GIL) CPython, e.g. python 3.14 `cp314t`, which
+# deadlocks PythonCall while importing `datasets`' C extensions and hangs the doc build.
+[deps.python]
+version = "<3.14"
+
