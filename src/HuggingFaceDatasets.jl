@@ -4,7 +4,8 @@ using PythonCall
 using MLUtils: getobs, numobs
 import MLUtils
 using DLPack: DLPack
-using ImageCore
+using ImageCore: colorview, RGB, Gray, N0f8
+using Tables: Tables
 
 const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()
