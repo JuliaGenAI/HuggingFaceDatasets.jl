@@ -12,6 +12,7 @@ const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()
 const np = PythonCall.pynew()
 const pycopy = PythonCall.pynew() # the python `copy` module (renamed to avoid shadowing `Base.copy`)
+const pickle = PythonCall.pynew() # used to (de)serialize `Dataset` by reference for `Distributed`
 
 export datasets
 
@@ -52,6 +53,11 @@ export concatenate_datasets,
     interleave_datasets,
     load_from_disk
 
+# Recipe-based `Serialization` for `Dataset` (ships an on-disk path, never a `Py`), so a
+# `Dataset` can be sent to `Distributed` worker processes — the basis for process-parallel
+# data loaders. Included after `toplevel.jl` as it uses `load_from_disk`.
+include("serialization.jl")
+
 # `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
 @compat public from_csv, from_json, from_parquet
 
@@ -65,6 +71,7 @@ function __init__()
     pyimport("PIL.JpegImagePlugin")
     PythonCall.pycopy!(np, pyimport("numpy"))
     PythonCall.pycopy!(pycopy, pyimport("copy"))
+    PythonCall.pycopy!(pickle, pyimport("pickle"))
 end
 
 end # module
