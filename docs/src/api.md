@@ -18,6 +18,18 @@ IterableDatasetDict
 Column
 ```
 
+## Schema (features)
+
+```@docs
+features
+Features
+ClassLabel
+Value
+class_names
+int2str
+str2int
+```
+
 ## Loading
 
 ```@docs

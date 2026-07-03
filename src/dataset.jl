@@ -224,6 +224,9 @@ function Base.getproperty(ds::Dataset, s::Symbol)
     if s in fieldnames(Dataset)
         return getfield(ds, s)
     end
+    # Return the schema as a Julia `Features` view (see `features.jl`) instead of the raw
+    # Python mapping, so `ds.features["label"]` yields a wrapped `ClassLabel`/`Value` leaf.
+    s === :features && return features(ds)
     # Route the format and `map`/`filter` methods to this package's own versions (see
     # `_method_override`); every other name forwards to the wrapped Python object.
     override = _method_override(ds, s)

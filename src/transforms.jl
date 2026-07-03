@@ -187,6 +187,8 @@ jl2py(x::DatasetDict)         = getfield(x, :py)
 jl2py(x::IterableDataset)     = getfield(x, :py)
 jl2py(x::IterableDatasetDict) = getfield(x, :py)
 jl2py(x::Column)              = getfield(x, :py)
+# `jl2py` for the schema views (`Features`/`ClassLabel`/`Value`) is defined in `features.jl`,
+# where those types are declared.
 
 function jl2py(x::AbstractDict)
     d = pydict()
