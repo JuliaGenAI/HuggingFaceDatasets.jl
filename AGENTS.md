@@ -43,6 +43,14 @@ that lazily converts observations to Julia types).
   PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
   format is numpy-backed, so numeric array columns decode to real N-D Julia arrays
   and image columns decode to raw numeric arrays (not `Colorant` colorviews).
+- `src/features.jl` — `Py`-backed views over a dataset's schema: `Features` (an
+  `AbstractDict` returned by `ds.features`), and the `ClassLabel`/`Value` leaves it
+  wraps, each forwarding attribute/method access to Python (`cl.names`,
+  `cl.int2str`, `v.dtype`). Handled at the access site (a `:features` branch in
+  `Dataset`'s `getproperty`), never in the `py2jl` batch hot path. Also the Julian
+  label-decoding helpers `class_names`/`int2str`/`str2int` (`(ds, col, …)`), and
+  `jl2py` overloads so a Julia-built schema round-trips into a `features=` argument.
+  Everything here is public but unexported; the Pythonic idioms are primary.
 - `src/serialization.jl` — `Serialization.serialize`/`deserialize` for `Dataset`,
   so it can cross a process boundary (process-parallel data loaders). Never
   serializes the wrapped `Py` directly; instead uses `datasets`' own pickle

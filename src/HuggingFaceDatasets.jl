@@ -45,6 +45,10 @@ export py2jl,
     jl2numpy,
     numpy2jl
 
+include("features.jl")
+export Features, ClassLabel
+@compat public Value, features, class_names, int2str, str2int
+
 include("load_dataset.jl")
 export load_dataset
 
@@ -53,12 +57,8 @@ export concatenate_datasets,
     interleave_datasets,
     load_from_disk
 
-# Recipe-based `Serialization` for `Dataset` (ships an on-disk path, never a `Py`), so a
-# `Dataset` can be sent to `Distributed` worker processes — the basis for process-parallel
-# data loaders. Included after `toplevel.jl` as it uses `load_from_disk`.
 include("serialization.jl")
 
-# `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
 @compat public from_csv, from_json, from_parquet
 
 function __init__()

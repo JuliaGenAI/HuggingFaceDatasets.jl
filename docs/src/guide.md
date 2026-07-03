@@ -2,6 +2,8 @@
 CurrentModule = HuggingFaceDatasets
 DocTestSetup = quote
     using HuggingFaceDatasets, PythonCall
+    using HuggingFaceDatasets: features, class_names, int2str, str2int, Value
+    HuggingFaceDatasets.datasets.disable_progress_bars()
 end
 ```
 
@@ -127,6 +129,88 @@ Keyword arguments are forwarded as Python keyword arguments, so calls like
     interface is 1-based. Consult the
     [`datasets` documentation](https://huggingface.co/docs/datasets) for the exact
     meaning of each method's arguments.
+
+## Inspecting the schema: features and labels
+
+Every dataset carries a **schema** describing each column's type. `ds.features` returns it as
+a [`Features`](@ref) view — an `AbstractDict` from column name to feature type — so you can
+inspect dtypes and, crucially, decode integer class labels. Indexing a column yields its
+feature: a [`Value`](@ref) for a scalar column (carrying an Arrow `dtype`), a
+[`ClassLabel`](@ref) for an encoded label, and so on.
+
+```jldoctest guide
+julia> ds = Dataset((; text=["good", "bad", "good"], label=["pos", "neg", "pos"]));
+
+julia> ds.features
+{'text': Value('string'), 'label': Value('string')}
+
+julia> ds.features["text"]
+Value('string')
+```
+
+The most useful leaf is [`ClassLabel`](@ref), which maps integer class ids to names. Turn a
+string column into one with the forwarded `class_encode_column`, then read the mapping straight
+off the feature with Pythonic method chaining (`.names`, `.int2str`, `.str2int`):
+
+```jldoctest guide
+julia> ds = Dataset((; label=["pos", "neg", "pos"]));
+
+julia> ds = ds.class_encode_column("label");   # string column -> ClassLabel (names sorted)
+
+julia> cl = ds.features["label"]
+ClassLabel(names=['neg', 'pos'])
+
+julia> cl.names
+2-element Vector{String}:
+ "neg"
+ "pos"
+
+julia> cl.int2str(0)            # 0-based class id -> name (no index offset)
+"neg"
+
+julia> cl.str2int("pos")
+1
+
+julia> ds["label"]              # the stored ids are 0-based data, not 1-based indices
+3-element HuggingFaceDatasets.Column{Int64}:
+ 1
+ 0
+ 1
+```
+
+!!! note "Class ids are 0-based data"
+    A `ClassLabel` column stores **0-based class ids** (`ds["label"]` above is `[1, 0, 1]`),
+    not 1-based Julia indices. `int2str`/`str2int` pass ids through to Python unchanged; only
+    the wrapper's `getindex`/iteration interface is 1-based. Decoding a whole column is
+    therefore `cl.names[ds["label"] .+ 1]`, where the `+1` bridges a 0-based id to a 1-based
+    Julia position.
+
+For the common "from a dataset and column name" case there are also public (unexported) Julian
+shortcuts — [`class_names`](@ref), [`int2str`](@ref), and [`str2int`](@ref) — that look up the
+column's `ClassLabel` for you (and error clearly if it isn't one):
+
+```jldoctest guide
+julia> ds = Dataset((; label=["pos", "neg", "pos"]));
+
+julia> ds = ds.class_encode_column("label");
+
+julia> class_names(ds, "label")
+2-element Vector{String}:
+ "neg"
+ "pos"
+
+julia> int2str(ds, "label", [0, 1, 1])   # decode a batch of ids in one call
+3-element Vector{String}:
+ "neg"
+ "pos"
+ "pos"
+```
+
+Reach these as `HuggingFaceDatasets.class_names` etc., or bring them into scope with
+`using HuggingFaceDatasets: class_names, int2str, str2int`. To **construct** a schema from
+Julia — e.g. to pass as a `features=` argument — build the wrapper types (also public but
+unexported: `HuggingFaceDatasets.ClassLabel(names=["neg", "pos"])`,
+`HuggingFaceDatasets.Value("int64")`) and hand them back to Python with [`jl2py`](@ref).
 
 ## The `"julia"` format and transforms
 

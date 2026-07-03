@@ -12,6 +12,10 @@ end
     include("dataset.jl")
 end
 
+@testset "features" begin
+    include("features.jl")
+end
+
 @testset "datasetdict" begin
     include("datasetdict.jl")
 end

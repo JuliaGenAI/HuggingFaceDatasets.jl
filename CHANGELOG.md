@@ -37,6 +37,18 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `BoundsError`, instead of `AssertionError` — update any code catching `AssertionError`.
 
 ### Added
+- Julia views over a dataset's schema. `ds.features` now returns a `Features` view (an
+  `AbstractDict{String, Any}`) instead of a raw `Py` mapping: indexing a column yields a wrapped
+  `ClassLabel`/`Value` leaf (other feature types stay raw `Py`), each forwarding attribute and
+  method access to Python (`cl.names`, `cl.num_classes`, `cl.int2str(i)`, `cl.str2int(s)`,
+  `v.dtype`). The views can be built from Julia (`ClassLabel(names=[…])`, `Value("int64")`,
+  `Features(Dict(…))`) and handed back to Python via `jl2py` (e.g. a `features=` schema
+  argument). Public but unexported Julian conveniences look up a column's `ClassLabel` in one
+  call: `class_names(ds, col)`, `int2str(ds, col, i)`, `str2int(ds, col, s)` (label ids are
+  0-based data, passed through with no index offset), plus `features(ds)` as the function form
+  of `ds.features`. `Features`/`ClassLabel`/`Value` and these helpers are all public but not
+  exported — the Pythonic idioms (`ds.features`, method chaining, `datasets.ClassLabel(…)`) are
+  the primary interface.
 - `Serialization` support for `Dataset`: `Serialization.serialize`/`deserialize` now work,
   so a `Dataset` can cross a process boundary — the prerequisite for process-parallel data
   loaders (e.g. a `MLUtils.DataLoader(ds; num_workers=N)` that spreads `getobs` over worker

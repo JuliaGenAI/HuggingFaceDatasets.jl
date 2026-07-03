@@ -1,8 +1,13 @@
 using HuggingFaceDatasets
 using Documenter
 
+# Bring the public-but-unexported schema conveniences into doctest scope, and disable
+# `datasets`' tqdm progress bars so doctests that trigger them (e.g. `class_encode_column`)
+# don't emit a progress line into the captured output.
 DocMeta.setdocmeta!(HuggingFaceDatasets, :DocTestSetup,
-    :(using HuggingFaceDatasets, PythonCall); recursive=true)
+    :(using HuggingFaceDatasets, PythonCall;
+      using HuggingFaceDatasets: features, class_names, int2str, str2int, Value;
+      HuggingFaceDatasets.datasets.disable_progress_bars()); recursive=true)
 
 makedocs(;
     modules=[HuggingFaceDatasets],
