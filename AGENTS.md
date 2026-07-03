@@ -56,8 +56,10 @@ that lazily converts observations to Julia types).
   serializes the wrapped `Py` directly; instead uses `datasets`' own pickle
   (on-disk datasets pickle by reference to their mmapped Arrow `cache_files`;
   in-memory ones are materialized to a temp Arrow dir once, fingerprint-cached).
-- `src/callable.jl`, `src/observation.jl` — small helpers (method forwarding to
-  the wrapped Python object; `MLUtils` `getobs`/`numobs` integration).
+- `src/callable.jl` — small helper for method forwarding to the wrapped Python
+  object. The `getobs`/`numobs` observation interface comes from `MLCore` (≥ 1.1);
+  `getobs(::Py, ::Integer)` is provided by MLCore's `PythonCall` extension, so the
+  package no longer carries its own (pirate) method for it.
 
 ## Python dependencies
 

@@ -2,8 +2,9 @@ module HuggingFaceDatasets
 
 using PythonCall
 using Compat: @compat
-using MLUtils: getobs, numobs
-import MLUtils
+# `getobs` for `Py` observation containers is provided by MLCore's PythonCall extension
+# (MLCore ≥ 1.1), so no `getobs(::Py, ::Integer)` specialization is needed here.
+using MLCore: getobs
 using DLPack: DLPack
 using ImageCore: colorview, RGB, Gray, N0f8
 using Tables: Tables
@@ -15,8 +16,6 @@ const pycopy = PythonCall.pynew() # the python `copy` module (renamed to avoid s
 const pickle = PythonCall.pynew() # used to (de)serialize `Dataset` by reference for `Distributed`
 
 export datasets
-
-include("observation.jl")
 
 include("callable.jl")
 

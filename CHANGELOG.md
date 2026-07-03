@@ -153,6 +153,11 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `Dataset` (was `pyds`) and `DatasetDict` (was `pyd`), for consistency. This field is
   not part of the public API (it is shadowed by `getproperty`), so the change is
   non-breaking for documented usage.
+- Depend on `MLCore` (≥ 1.1) instead of `MLUtils` for the `getobs`/`numobs` observation
+  interface, and drop the package's own `getobs(::Py, ::Integer)` method (type piracy on
+  `PythonCall.Py`). `getobs` for Python observation containers is now provided by MLCore's
+  `PythonCall` extension. `MLUtils.DataLoader` still works, since MLUtils re-exports the
+  same `getobs`/`numobs` from MLCore.
 
 ### Fixed
 - Fixed a segfault triggered by REPL tab-completion on a `DatasetDict` (`d[<TAB>`), which
