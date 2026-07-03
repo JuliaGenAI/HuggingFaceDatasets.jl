@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `MLUtils.DataLoader(ds::Dataset; num_workers=N)` now works out of the box for process-parallel
+  loading. Passing a `Dataset` with `num_workers > 0` transparently wraps it in a new exported
+  `DistributedDataset`, which precomputes the `pickle` payload on the calling (GIL-holding) task
+  so the loader's background feeder ships bytes instead of calling Python off the GIL — which
+  segfaulted. An `@info` notes when an in-memory dataset is first materialized to a temporary
+  Arrow file for this. Requires MLUtils ≥ 0.4.10 (the first release with `num_workers`).
+
+## [0.4.0] - 2026-07-02
+
 This is a breaking release (0.3.x → 0.4.0). The headline change is that datasets are
 now returned in the `"julia"` format by default, so observations come back as native
 Julia values instead of raw Python objects. See **Breaking** below before upgrading.
@@ -188,5 +198,6 @@ Baseline. Changes up to and including this release are recorded in the
 [git history](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/commits/main) and the
 [GitHub releases](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/releases).
 
-[Unreleased]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/releases/tag/v0.3.4

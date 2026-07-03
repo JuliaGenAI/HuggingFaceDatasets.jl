@@ -11,7 +11,8 @@ end
 
 This guide covers how the wrapper relates to the underlying Python `datasets` library,
 the `"julia"` format and the transform pipeline, array orientation and working with
-images, and how to feed a dataset into a Julia data loader.
+images, and how to feed a dataset into a Julia data loader — including process-parallel
+(`num_workers`) loading that scales past CPython's GIL.
 
 The examples below build small datasets in memory with the [`Dataset`](@ref) constructor
 (which accepts a `Dict` or `NamedTuple` of columns) so that they are self-contained and
@@ -422,7 +423,7 @@ numeric array**, not an `ImageCore` colorview. Combined with the axis reversal a
   while a ragged (variable-size) column falls back to a `Vector` of per-row arrays.
 
 That raw layout is what you want for feeding a model (see
-[Integration with MLUtils and data loaders](@ref) and the MNIST example), but to *look* at
+[Data loaders](@ref) and the MNIST example), but to *look* at
 an image you turn it back into a colorview and undo the transpose with `permutedims`. Two
 small helpers cover the common cases:
 
@@ -467,11 +468,11 @@ The same `to_rgb` helper handles color datasets (e.g. `to_rgb(ds[1]["img"])` on 
 and it round-trips exactly: the recovered array is pixel-for-pixel identical to the image
 `datasets` decodes on the Python side.
 
-## Integration with MLUtils and data loaders
+## Integration with MLUtils
 
 A [`Dataset`](@ref) implements the length/`getindex` interface expected by
-[MLUtils.jl](https://github.com/JuliaML/MLUtils.jl), so `numobs`, `getobs`, `mapobs`, and
-data loaders such as `Flux.DataLoader` work directly:
+[MLUtils.jl](https://github.com/JuliaML/MLUtils.jl), so `numobs`, `getobs`, and `mapobs`
+work directly:
 
 ```jldoctest guide
 julia> using MLUtils
@@ -495,23 +496,46 @@ julia> getobs(mapped, 1:4)
  40
 ```
 
-Putting it together for MNIST: the default `"julia"` format already stacks the image
-column into a `(W, H, N)` numeric array, so you `mapobs` a transform that rescales it to
-`Float32` (plus `Flux.onehotbatch` for the labels), then hand the result to a
-`Flux.DataLoader`:
+Because of this, a `Dataset` can be handed straight to a data loader — see below.
+
+## Data Loaders
+
+Since a [`Dataset`](@ref) is a valid MLUtils data container, you can pass one straight to
+`MLUtils.DataLoader` (re-exported by Flux as `Flux.DataLoader`). See the
+[MLUtils docs](https://juliaml.github.io/MLUtils.jl/stable/) for the full set of options; the
+points below are specific to a `Dataset`.
 
 ```julia-repl
-julia> train_data = load_dataset("ylecun/mnist", split="train");
+julia> using MLUtils
 
-julia> train_data = mapobs(mnist_transform, train_data)[:];   # lazily map, then materialize
+julia> ds = load_dataset("ylecun/mnist", split="train");   # "julia" format by default
 
-julia> train_loader = Flux.DataLoader(train_data; batchsize=128, shuffle=true);
+julia> loader = DataLoader(ds; batchsize=128, shuffle=true);
 ```
 
-Materializing with `[:]` loads the whole (transformed) dataset into memory, which is
-fastest for small datasets like MNIST. Dropping the `[:]` keeps loading on-the-fly, which
-is slower per epoch but avoids holding everything in memory.
-
-This snippet needs the Hub and the Flux/ImageCore stack, so it is not run as a doctest; a
-complete, runnable version — including `mnist_transform` and the training loop — lives in
+For small datasets you can **materialize** into memory up front with `[:]` (faster per epoch,
+no decoding during iteration); otherwise the loader reads **on the fly**, keeping memory flat.
+A complete example — including the `mapobs` transform and training loop — lives in
 [`examples/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist.jl).
+
+### Process-parallel loading with `num_workers`
+
+When loading on the fly, `getobs` calls into CPython, and CPython's global interpreter lock
+(**GIL**) serializes those reads — so `parallel=true` (threads) gives ~1× on a `Dataset`.
+Use `num_workers=N` instead (MLUtils v0.4.10 or newer): it spreads `getobs` over `N` worker
+**processes** (via `Distributed`, mirroring PyTorch), each with its own interpreter and GIL,
+so loading scales near-linearly.
+
+```julia-repl
+julia> loader = DataLoader(ds; batchsize=128, shuffle=true, num_workers=4);
+
+julia> for batch in loader
+           x, y = batch["image"], batch["label"]   # built by 4 workers in parallel
+           # ... training step ...
+       end
+```
+
+It works because a `Dataset` is `Serialization`-compatible
+— it pickles by *reference* to its memory-mapped Arrow files, so workers re-mmap rather than
+copy. This requires the default `"julia"` format (so `getobs` returns serializable arrays), a
+serializable `jltransform` if you set one, and a shared filesystem across workers.

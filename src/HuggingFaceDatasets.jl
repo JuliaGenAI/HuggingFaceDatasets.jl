@@ -56,6 +56,11 @@ export concatenate_datasets,
 
 include("serialization.jl")
 
+# Transparent `MLUtils.DataLoader(ds; num_workers=N)` support (precompute the worker payload).
+include("dataloader.jl")
+export DistributedDataset
+
+# `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
 @compat public from_csv, from_json, from_parquet
 
 function __init__()
