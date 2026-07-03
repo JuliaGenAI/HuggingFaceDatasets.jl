@@ -535,7 +535,9 @@ julia> for batch in loader
        end
 ```
 
-It works because a `Dataset` is `Serialization`-compatible
-— it pickles by *reference* to its memory-mapped Arrow files, so workers re-mmap rather than
-copy. This requires the default `"julia"` format (so `getobs` returns serializable arrays), a
+Passing a `Dataset` to `DataLoader` with `num_workers > 0` transparently wraps it in a
+[`DistributedDataset`](@ref), which precomputes — on the calling task — the payload each worker
+needs (an `@info` notes when an in-memory dataset is first materialized to a temporary Arrow file
+for this). Workers re-mmap the dataset's Arrow files by *reference* rather than copying it, so
+this requires the default `"julia"` format (so `getobs` returns serializable arrays), a
 serializable `jltransform` if you set one, and a shared filesystem across workers.
