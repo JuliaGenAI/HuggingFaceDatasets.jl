@@ -37,7 +37,8 @@ const _SAVE_LOCK = ReentrantLock()
 
 # The `pickle` bytes that carry a dataset (by reference to its on-disk Arrow files) plus its
 # Python format across a process boundary. Calling this touches Python, so it must run on a
-# task holding the GIL (see `DistributedDataset`, which precomputes it on the main task).
+# task holding the GIL; the process-parallel `DataLoader` path serializes a `Dataset` on the
+# main (GIL-holding) task for exactly this reason, so nothing calls Python off the GIL.
 _pickle_bytes(ds::Dataset) = pyconvert(Vector{UInt8}, pickle.dumps(_ondisk_py(ds)))
 
 # Reconstruct the `Py` (re-mmapping the referenced Arrow files) from bytes produced by

@@ -8,12 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `MLUtils.DataLoader(ds::Dataset; num_workers=N)` now works out of the box for process-parallel
-  loading. Passing a `Dataset` with `num_workers > 0` transparently wraps it in a new exported
-  `DistributedDataset`, which precomputes the `pickle` payload on the calling (GIL-holding) task
-  so the loader's background feeder ships bytes instead of calling Python off the GIL — which
-  segfaulted. An `@info` notes when an in-memory dataset is first materialized to a temporary
-  Arrow file for this. Requires MLUtils ≥ 0.4.10 (the first release with `num_workers`).
+- `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
+  loading, including over `mapobs`/`ObsView`-wrapped datasets. The GIL-safe serialization it
+  relies on — running the dataset's `pickle` on the main task and loading this package on the
+  workers — is handled upstream by MLUtils, so no wrapper type is exported here. An `@info` notes
+  when an in-memory dataset is first materialized to a temporary Arrow file for this. Requires
+  MLUtils ≥ 0.4.11.
 
 ## [0.4.0] - 2026-07-02
 

@@ -522,7 +522,7 @@ A complete example — including the `mapobs` transform and training loop — li
 
 When loading on the fly, `getobs` calls into CPython, and CPython's global interpreter lock
 (**GIL**) serializes those reads — so `parallel=true` (threads) gives ~1× on a `Dataset`.
-Use `num_workers=N` instead (MLUtils v0.4.10 or newer): it spreads `getobs` over `N` worker
+Use `num_workers=N` instead (MLUtils v0.4.11 or newer): it spreads `getobs` over `N` worker
 **processes** (via `Distributed`, mirroring PyTorch), each with its own interpreter and GIL,
 so loading scales near-linearly.
 
@@ -535,9 +535,10 @@ julia> for batch in loader
        end
 ```
 
-Passing a `Dataset` to `DataLoader` with `num_workers > 0` transparently wraps it in a
-[`DistributedDataset`](@ref), which precomputes — on the calling task — the payload each worker
-needs (an `@info` notes when an in-memory dataset is first materialized to a temporary Arrow file
-for this). Workers re-mmap the dataset's Arrow files by *reference* rather than copying it, so
-this requires the default `"julia"` format (so `getobs` returns serializable arrays), a
-serializable `jltransform` if you set one, and a shared filesystem across workers.
+Under `num_workers > 0` the loader serializes `ds` on the calling task — so the Python work
+happens where the GIL makes it safe — and ships each worker the payload it needs; an `@info`
+notes when an in-memory dataset is first materialized to a temporary Arrow file for this. Workers
+re-mmap the dataset's Arrow files by *reference* rather than copying it, so this requires the
+default `"julia"` format (so `getobs` returns serializable arrays), a serializable `jltransform`
+if you set one, and a shared filesystem across workers. Wrapping the dataset in `mapobs`/`ObsView`
+before the loader is supported too.

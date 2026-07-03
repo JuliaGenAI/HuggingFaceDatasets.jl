@@ -47,12 +47,6 @@ concatenate_datasets
 interleave_datasets
 ```
 
-## Data loading
-
-```@docs
-DistributedDataset
-```
-
 ## Formats and transforms
 
 ```@docs
