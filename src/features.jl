@@ -146,13 +146,21 @@ function _wrap_feature(x::Py)
     end
 end
 
-Base.getindex(f::Features, k::AbstractString) = _wrap_feature(getfield(f, :py)[k])
+function Base.getindex(f::Features, k::AbstractString)
+    # Guard with the (Python-free) `haskey` so a missing column raises a Julia `KeyError`
+    # rather than surfacing Python's `KeyError` as a `PyException`.
+    haskey(f, k) || throw(KeyError(k))
+    return _wrap_feature(getfield(f, :py)[k])
+end
 Base.getindex(f::Features, k::Symbol) = f[string(k)]
 
 # `keys`/`length`/`haskey`/iteration answer from the cached `names` (no Python call).
 Base.keys(f::Features) = getfield(f, :names)
 Base.length(f::Features) = length(getfield(f, :names))
 Base.haskey(f::Features, k) = string(k) in getfield(f, :names)
+
+# `AbstractDict` has no generic `get`, so provide it (Python-free via the cached `haskey`).
+Base.get(f::Features, k, default) = haskey(f, k) ? f[k] : default
 
 function Base.iterate(f::Features, state = 1)
     names = getfield(f, :names)

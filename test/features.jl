@@ -27,6 +27,12 @@ _encoded() = Dataset((; label = ["cat", "dog", "dog", "cat"], x = [10, 20, 30, 4
     @test d["label"] isa ClassLabel
     @test d["x"] isa Value
 
+    # the rest of the `AbstractDict` surface the docstring promises
+    @test values(f) |> collect |> length == 2
+    @test get(f, "label", nothing) isa ClassLabel
+    @test get(f, "missing", :deflt) === :deflt
+    @test_throws KeyError f["missing"]        # not a raw Python `PyException`
+
     # keys/length are Python-free (answered from the cached names) — safe for tab-completion
     @test keys(f) == ["label", "x"]
 end
