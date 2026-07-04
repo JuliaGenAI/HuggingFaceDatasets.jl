@@ -2,8 +2,6 @@ module HuggingFaceDatasets
 
 using PythonCall
 using Compat: @compat
-# `getobs` for `Py` observation containers is provided by MLCore's PythonCall extension
-# (MLCore ≥ 1.1), so no `getobs(::Py, ::Integer)` specialization is needed here.
 using MLCore: getobs
 using DLPack: DLPack
 using ImageCore: colorview, RGB, Gray, N0f8
