@@ -1,15 +1,15 @@
-using Flux, Zygote
 using Random, Statistics
+using Flux
 using Flux.Losses: logitcrossentropy
 using Flux: onecold, onehotbatch
 using HuggingFaceDatasets
-using MLUtils
+using MLUtils: MLUtils, mapobs
 # using ProfileView, BenchmarkTools
 
 function mnist_transform(batch)
-    # under the "julia" (= numpy) format the image column is already a stacked
-    # (W, H, N) UInt8 array, so just rescale to Float32 in [0, 1]
-    image = Float32.(batch["image"]) ./ 255f0
+    # the image column is a stacked (W, H, N) UInt8 array,
+    # so just rescale to Float32 in [0, 1]
+    image = batch["image"] ./ 255f0
     return (; image, label = batch["label"])
 end
 
@@ -31,7 +31,7 @@ end
 # `num_workers = 0` loads on the main process; `num_workers > 0` spreads each batch's
 # `getobs` (and the CPython read it triggers) over that many worker processes, sidestepping
 # the GIL. MLUtils spawns the workers on demand under the current `--project`.
-function train(; epochs=2, num_workers=0)
+function train(; epochs=2, num_workers=0, materialize=false, parallel=false, verbose=true)
     batchsize = 128
     nhidden = 100
     device = cpu
@@ -42,9 +42,13 @@ function train(; epochs=2, num_workers=0)
     # `num_workers > 0`); `mapobs`/`ObsView`-wrapped datasets compose with `num_workers`
     train_data = mapobs(mnist_transform, train_data)
     test_data = mapobs(mnist_transform, test_data)
+    if materialize
+        train_data = train_data[:]
+        test_data = test_data[:]
+    end
 
-    train_loader = Flux.DataLoader(train_data; batchsize, shuffle=true, num_workers)
-    test_loader = Flux.DataLoader(test_data; batchsize, num_workers)
+    train_loader = Flux.DataLoader(train_data; batchsize, shuffle=true, num_workers, parallel)
+    test_loader = Flux.DataLoader(test_data; batchsize, num_workers, parallel)
 
     model = Chain([Flux.flatten,
                    Dense(28*28, nhidden, relu),
@@ -61,17 +65,29 @@ function train(; epochs=2, num_workers=0)
         @info map(r, (; epoch, train_loss, train_acc, test_loss, test_acc))
     end
 
-    report(0)
-	@time for epoch in 1:epochs
+    verbose && report(0)
+	for epoch in 1:epochs
 		for (x, y) in train_loader
 			x = x |> device
 			yoh = onehotbatch(y, 0:9) |> device
-			loss, grads = withgradient(m -> logitcrossentropy(m(x), yoh), model)
+			loss, grads = Flux.withgradient(m -> logitcrossentropy(m(x), yoh), model)
             Flux.update!(opt, model, grads[1])
 		end
-        report(epoch)
+        verbose && report(epoch)
 	end
 end
 
-# @time train(; epochs=2, num_workers=0)
-@time train(; epochs=2, num_workers=4)
+println("#### START COMPARISON ###########")
+MLUtils.close_dataloader_pool()
+println("### WARMUP") # for precompilation
+@time train(; epochs=1, num_workers=0, materialize=false, verbose=false)
+println("### Serial")
+@time train(; epochs=4, num_workers=0, materialize=false, verbose=false)
+println("### Serial Materialized")
+@time train(; epochs=4, num_workers=0, materialize=true, verbose=false)
+println("### Paralle Materialized")
+@time train(; epochs=4, num_workers=0, materialize=true, parallel=true, verbose=false)
+println("### Distributed")
+@time train(; epochs=4, num_workers=4, materialize=false, verbose=false)
+MLUtils.close_dataloader_pool()
+println("#### END COMPARISON ###########")

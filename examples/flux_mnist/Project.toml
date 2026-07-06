@@ -12,4 +12,5 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 HuggingFaceDatasets = {path = "../.."}
 
 [compat]
+DataStructures = "0.19"
 MLUtils = "0.4"

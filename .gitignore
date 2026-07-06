@@ -8,3 +8,4 @@ Manifest.toml
 .ipynb_checkpoints
 LocalPreferences.toml
 .claude/
+__pycache__/

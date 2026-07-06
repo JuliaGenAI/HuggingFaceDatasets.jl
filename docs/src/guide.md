@@ -293,7 +293,7 @@ Note that the format and the custom transform share the same slot: setting the `
 format installs `py2jl` as the transform, and `with_jltransform` then replaces it — which
 is why the transform above calls `py2jl` itself. For layering additional per-batch
 processing on top of the `"julia"` format, prefer `MLUtils.mapobs` (see below), as in the
-[`examples/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist.jl)
+[`examples/flux_mnist/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist/flux_mnist.jl)
 script.
 
 The order of operations when you index is:
@@ -525,4 +525,4 @@ works because a `Dataset` serializes by *reference* to its on-disk Arrow files (
 dataset is first materialized to a temporary Arrow file), so it needs a serializable `jltransform` if you set one. See the MLUtils guide for the mechanics and tradeoffs.
 
 A complete example — `mapobs` transform, `num_workers`, and a training loop — lives in
-[`examples/flux_mnist/main.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist/main.jl).
+[`examples/flux_mnist/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist/flux_mnist.jl).
