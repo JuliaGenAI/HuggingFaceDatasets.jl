@@ -506,23 +506,96 @@ A [`Dataset`](@ref) is a valid MLUtils data container, so you can hand one strai
 [MLUtils Data Loaders guide](https://juliaml.github.io/MLUtils.jl/stable/guide/iteration/);
 the notes below are specific to a `Dataset`.
 
+### Iterating batches
+
+Each batch is the dataset's own `"julia"`-format batch: the columns for the batch's rows,
+stacked and keyed by name (numeric array columns stack into an N-D array with the
+observation axis last). Small, self-contained example:
+
+```jldoctest guide
+julia> loader = DataLoader(Dataset((; x=1:6, y=10:10:60)); batchsize=2);
+
+julia> batch = first(loader);
+
+julia> batch["x"], batch["y"]
+([1, 2], [10, 20])
+```
+
+Most training loops want `(input, target)` pairs rather than a `Dict`, so wrap the dataset
+in a `mapobs` that reshapes each observation; the loader then collates the tuples
+column-wise into an `(inputs, targets)` batch you can destructure with `for (x, y) in
+loader`:
+
+```jldoctest guide
+julia> reshape_obs(o) = (o["x"] * 100, o["y"]);   # per-observation: Dict -> (input, target)
+
+julia> loader = DataLoader(mapobs(reshape_obs, Dataset((; x=1:6, y=10:10:60))); batchsize=2);
+
+julia> first(loader)
+([100, 200], [10, 20])
+```
+
+Against the Hub, the same shapes hold — swap the in-memory `Dataset` for a `load_dataset`:
+
 ```julia-repl
 julia> using MLUtils
 
 julia> ds = load_dataset("ylecun/mnist", split="train");   # "julia" format by default
 
 julia> loader = DataLoader(ds; batchsize=128, shuffle=true);
+
+julia> batch = first(loader);   # batch["image"] is (28, 28, 128), batch["label"] is length-128
 ```
 
-For small datasets you can **materialize** into memory up front with `[:]` (faster per epoch,
-no decoding during iteration); otherwise the loader reads **on the fly**, keeping memory flat.
+### Materializing vs. reading on the fly
+
+For small datasets you can **materialize** into memory up front with `[:]` (faster per
+epoch, no decoding during iteration); otherwise the loader reads **on the fly**, keeping
+memory flat:
+
+```julia-repl
+julia> materialized = DataLoader(ds[:]; batchsize=128, shuffle=true);   # whole dataset in RAM
+
+julia> on_the_fly  = DataLoader(ds; batchsize=128, shuffle=true);       # decode per batch
+```
+
+Layer a per-batch transform with `mapobs`; with `[:]` on the *mapped* dataset the transform
+runs once up front, without it the transform runs per batch during iteration:
+
+```julia-repl
+julia> mnist_transform(o) = (Float32.(o["image"]) ./ 255, o["label"]);
+
+julia> train = mapobs(mnist_transform, ds);
+
+julia> loader = DataLoader(train[:]; batchsize=128, shuffle=true);   # or drop [:] for on-the-fly
+```
+
+### Parallel loading (`num_workers`)
 
 Reading on the fly calls into CPython, and CPython's global interpreter lock (**GIL**)
 serializes those reads, so thread-based `parallel=true` gives ~1× on a `Dataset`. Use
 `num_workers=N` instead (needs MLUtils ≥ 0.4.11): it spreads `getobs` over `N` worker
-**processes**, each with its own interpreter and GIL, so loading scales past the GIL. This
-works because a `Dataset` serializes by *reference* to its on-disk Arrow files (an in-memory
-dataset is first materialized to a temporary Arrow file), so it needs a serializable `jltransform` if you set one. See the MLUtils guide for the mechanics and tradeoffs.
+**processes**, each with its own interpreter and GIL, so loading scales past the GIL:
 
-A complete example — `mapobs` transform, `num_workers`, and a training loop — lives in
-[`examples/flux_mnist/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist/flux_mnist.jl).
+```julia-repl
+julia> loader = DataLoader(ds; batchsize=128, num_workers=4);   # 4 worker processes
+
+julia> for batch in loader
+           # ... training step ...
+       end
+```
+
+This works because a `Dataset` serializes by *reference* to its on-disk Arrow files
+(an in-memory dataset is first materialized to a temporary Arrow file, announced with an
+`@info`), so if you set a `jltransform` it must be serializable. It composes with a
+`mapobs`/`ObsView` wrapper at any nesting — `DataLoader(mapobs(f, ds); num_workers=4)` runs
+`f` on the workers. Batches may arrive **out of input order** across workers; combine with
+`shuffle=true` (or don't rely on order). Worker processes are launched on demand under the
+current `--project`; call `MLUtils.close_dataloader_pool()` to tear them down. Process
+parallelism only pays off when `getobs` is the bottleneck (large images, heavy decode) —
+for cheap observations the IPC overhead can make it slower than serial. See the MLUtils
+guide for the mechanics and tradeoffs.
+
+A complete example — `mapobs` transform, `num_workers`, and a training loop, benchmarked
+against PyTorch — lives in
+[`examples/flux_mnist/`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/examples/flux_mnist).
