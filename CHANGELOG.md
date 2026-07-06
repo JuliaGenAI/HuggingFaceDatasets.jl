@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
+  loading, including over `mapobs`/`ObsView`-wrapped datasets. Building on the `Serialization`
+  support added in 0.4.0, the GIL-safe serialization it relies on — running the dataset's
+  `pickle` on the main task and loading this package on the workers — is handled upstream by
+  MLUtils, so no wrapper type is exported here. An `@info` notes when an in-memory dataset is
+  first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
+
+## [0.4.1] - 2026-07-06
+
+### Added
+- Julia views over a dataset's schema. `ds.features` now returns a `Features` view (an
+  `AbstractDict{String, Any}`) instead of a raw `Py` mapping: indexing a column yields a wrapped
+  `ClassLabel`/`Value` leaf (other feature types stay raw `Py`), each forwarding attribute and
+  method access to Python (`cl.names`, `cl.num_classes`, `cl.int2str(i)`, `cl.str2int(s)`,
+  `v.dtype`). The views can be built from Julia (`ClassLabel(names=[…])`, `Value("int64")`,
+  `Features(Dict(…))`) and handed back to Python via `jl2py` (e.g. a `features=` schema
+  argument). Public but unexported Julian conveniences look up a column's `ClassLabel` in one
+  call: `class_names(ds, col)`, `int2str(ds, col, i)`, `str2int(ds, col, s)` (label ids are
+  0-based data, passed through with no index offset), plus `features(ds)` as the function form
+  of `ds.features`. `Features`/`ClassLabel`/`Value` and these helpers are all public but not
+  exported — the Pythonic idioms (`ds.features`, method chaining, `datasets.ClassLabel(…)`) are
+  the primary interface.
+
+### Changed
+- Depend on `MLCore` (≥ 1.1) instead of `MLUtils` for the `getobs`/`numobs` observation
+  interface, and drop the package's own `getobs(::Py, ::Integer)` method (type piracy on
+  `PythonCall.Py`). `getobs` for Python observation containers is now provided by MLCore's
+  `PythonCall` extension. `MLUtils.DataLoader` still works, since MLUtils re-exports the
+  same `getobs`/`numobs` from MLCore.
+
+## [0.4.0] - 2026-07-02
+
 This is a breaking release (0.3.x → 0.4.0). The headline change is that datasets are
 now returned in the `"julia"` format by default, so observations come back as native
 Julia values instead of raw Python objects. See **Breaking** below before upgrading.
@@ -37,18 +70,6 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `BoundsError`, instead of `AssertionError` — update any code catching `AssertionError`.
 
 ### Added
-- Julia views over a dataset's schema. `ds.features` now returns a `Features` view (an
-  `AbstractDict{String, Any}`) instead of a raw `Py` mapping: indexing a column yields a wrapped
-  `ClassLabel`/`Value` leaf (other feature types stay raw `Py`), each forwarding attribute and
-  method access to Python (`cl.names`, `cl.num_classes`, `cl.int2str(i)`, `cl.str2int(s)`,
-  `v.dtype`). The views can be built from Julia (`ClassLabel(names=[…])`, `Value("int64")`,
-  `Features(Dict(…))`) and handed back to Python via `jl2py` (e.g. a `features=` schema
-  argument). Public but unexported Julian conveniences look up a column's `ClassLabel` in one
-  call: `class_names(ds, col)`, `int2str(ds, col, i)`, `str2int(ds, col, s)` (label ids are
-  0-based data, passed through with no index offset), plus `features(ds)` as the function form
-  of `ds.features`. `Features`/`ClassLabel`/`Value` and these helpers are all public but not
-  exported — the Pythonic idioms (`ds.features`, method chaining, `datasets.ClassLabel(…)`) are
-  the primary interface.
 - `Serialization` support for `Dataset`: `Serialization.serialize`/`deserialize` now work,
   so a `Dataset` can cross a process boundary — the prerequisite for process-parallel data
   loaders (e.g. a `MLUtils.DataLoader(ds; num_workers=N)` that spreads `getobs` over worker
@@ -153,11 +174,6 @@ Julia values instead of raw Python objects. See **Breaking** below before upgrad
   `Dataset` (was `pyds`) and `DatasetDict` (was `pyd`), for consistency. This field is
   not part of the public API (it is shadowed by `getproperty`), so the change is
   non-breaking for documented usage.
-- Depend on `MLCore` (≥ 1.1) instead of `MLUtils` for the `getobs`/`numobs` observation
-  interface, and drop the package's own `getobs(::Py, ::Integer)` method (type piracy on
-  `PythonCall.Py`). `getobs` for Python observation containers is now provided by MLCore's
-  `PythonCall` extension. `MLUtils.DataLoader` still works, since MLUtils re-exports the
-  same `getobs`/`numobs` from MLCore.
 
 ### Fixed
 - Fixed a segfault triggered by REPL tab-completion on a `DatasetDict` (`d[<TAB>`), which
@@ -188,5 +204,7 @@ Baseline. Changes up to and including this release are recorded in the
 [git history](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/commits/main) and the
 [GitHub releases](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/releases).
 
-[Unreleased]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/releases/tag/v0.3.4

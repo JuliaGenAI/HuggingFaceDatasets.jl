@@ -35,6 +35,18 @@ using Serialization: AbstractSerializer
 const _SAVE_CACHE = Dict{String,String}()
 const _SAVE_LOCK = ReentrantLock()
 
+# The `pickle` bytes that carry a dataset (by reference to its on-disk Arrow files) plus its
+# Python format across a process boundary. Calling this touches Python, so it must run on a
+# task holding the GIL; the process-parallel `DataLoader` path serializes a `Dataset` on the
+# main (GIL-holding) task for exactly this reason, so nothing calls Python off the GIL.
+_pickle_bytes(ds::Dataset) = pyconvert(Vector{UInt8}, pickle.dumps(_ondisk_py(ds)))
+
+# Reconstruct the `Py` (re-mmapping the referenced Arrow files) from bytes produced by
+# `_pickle_bytes`. `pickle.loads` runs arbitrary code; safe here because the bytes come from our
+# own `serialize` over a trusted `Distributed` cluster (no different from Distributed running
+# serialized closures). Do not point it at untrusted bytes.
+_unpickle_py(bytes) = pickle.loads(pybytes(bytes))
+
 # A `datasets.Dataset` `Py` backed by on-disk Arrow files, so `pickle` references the files
 # (zero-copy re-mmap on the worker) instead of embedding the in-memory buffer. On-disk
 # datasets (Hub / `load_from_disk` / `from_*`) already qualify; in-memory ones are
@@ -44,7 +56,10 @@ function _ondisk_py(ds::Dataset)
     length(py.cache_files) == 0 || return py
     dir = lock(_SAVE_LOCK) do
         get!(_SAVE_CACHE, pyconvert(String, py._fingerprint)) do
-            d = mktempdir(); py.save_to_disk(d); d      # auto-removed at process exit
+            d = mktempdir()   # auto-removed at process exit
+            @info "HuggingFaceDatasets: writing in-memory dataset to a temporary Arrow file." path = d
+            py.save_to_disk(d)
+            d
         end
     end
     return getfield(load_from_disk(dir)::Dataset, :py)
@@ -54,7 +69,7 @@ function Serialization.serialize(s::AbstractSerializer, ds::Dataset)
     Serialization.serialize_type(s, Dataset)
     # `pickle` carries the data (by reference to the on-disk Arrow files) AND the Python
     # format; the Julia transform is a separate field of the wrapper, so it rides alongside.
-    Serialization.serialize(s, pyconvert(Vector{UInt8}, pickle.dumps(_ondisk_py(ds))))
+    Serialization.serialize(s, _pickle_bytes(ds))
     Serialization.serialize(s, getfield(ds, :jltransform))
     return nothing
 end
@@ -62,9 +77,5 @@ end
 function Serialization.deserialize(s::AbstractSerializer, ::Type{Dataset})
     bytes       = Serialization.deserialize(s)
     jltransform = Serialization.deserialize(s)
-    # `pickle.loads` runs arbitrary code; safe here because `bytes` come from our own
-    # `serialize` over a trusted `Distributed` cluster (no different from Distributed running
-    # serialized closures). Do not point it at untrusted bytes.
-    py = pickle.loads(pybytes(bytes))                   # re-mmaps the referenced Arrow files
-    return set_jltransform!(Dataset(py), jltransform)   # Python format already restored by pickle
+    return set_jltransform!(Dataset(_unpickle_py(bytes)), jltransform)   # format restored by pickle
 end
