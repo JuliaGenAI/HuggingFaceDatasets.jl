@@ -70,6 +70,17 @@ function __init__()
     PythonCall.pycopy!(np, pyimport("numpy"))
     PythonCall.pycopy!(pycopy, pyimport("copy"))
     PythonCall.pycopy!(pickle, pyimport("pickle"))
+
+    # Pin the already-resolved Python interpreter for any child processes.
+    #
+    # The recommended way to parallelize loading past the CPython GIL is
+    # `DataLoader(dataset; num_workers=N)`, which spawns `N` `Distributed` worker
+    # processes that each `using PythonCall`. Without the following, every worker independently
+    # *re-resolves* the CondaPkg environment on startup, in lockstep: they serialize on
+    # CondaPkg's file lock and redo work this parent process already did.
+    if PythonCall.C.CTX.which === :CondaPkg
+        get!(ENV, "JULIA_PYTHONCALL_EXE", PythonCall.python_executable_path()::String)
+    end
 end
 
 end # module
