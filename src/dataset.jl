@@ -428,7 +428,7 @@ removes all formatting (raw Python observations); any other string is forwarded 
 function set_format!(ds::Dataset, format)
     if format == "julia"
         # Use the numpy format so numeric array columns decode as real N-D arrays and a
-        # range index stacks rows into an `(N, dims…)` tensor; `py2jl` (via DLPack) then
+        # range index stacks rows into an `(N, dims…)` tensor; `py2jl` (zero-copy) then
         # reverses the axes to a Julia `(dims…, N)` array with the observation axis last.
         ds.py.set_format("numpy")
         ds.jltransform = py2jl

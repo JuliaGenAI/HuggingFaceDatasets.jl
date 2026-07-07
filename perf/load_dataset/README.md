@@ -97,14 +97,14 @@ copy), so the reads run concurrently. Single run; the `serial` row is the in-run
 
 - **The wrapper's overhead is small at batch granularity.** For the realistic `epoch`
   pipeline the `julia` format costs ~370 ms vs ~310 ms for Python's `numpy` format — about
-  **1.2×**. The convenience of native Julia arrays (copyless `py2jl` via DLPack) is nearly
+  **1.2×**. The convenience of native Julia arrays (copyless, zero-copy `py2jl`) is nearly
   free once you work in batches. Per-sample access is where the FFI cost shows up
   (`single`: ~2× Python), so avoid it in hot loops.
 
 - **Arrow-backed access is the bottleneck, not Julia.** `MLDatasets` — native, fully
   in-memory — is ~100× faster than any `datasets`-backed path. When a dataset fits in
   memory, materialize it once with `getobs(ds, :)` and feed an in-memory `DataLoader`
-  (see [`../examples/flux_mnist.jl`](../examples/flux_mnist.jl)); the Arrow decode then
+  (see [`../flux_mnist/flux_mnist.jl`](../flux_mnist/flux_mnist.jl)); the Arrow decode then
   becomes a one-time cost rather than a per-batch one.
 
 - **When it doesn't fit in memory, parallelize the read with processes, not threads.** The

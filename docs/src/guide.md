@@ -293,7 +293,7 @@ Note that the format and the custom transform share the same slot: setting the `
 format installs `py2jl` as the transform, and `with_jltransform` then replaces it — which
 is why the transform above calls `py2jl` itself. For layering additional per-batch
 processing on top of the `"julia"` format, prefer `MLUtils.mapobs` (see below), as in the
-[`examples/flux_mnist/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/examples/flux_mnist/flux_mnist.jl)
+[`perf/flux_mnist/flux_mnist.jl`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/blob/main/perf/flux_mnist/flux_mnist.jl)
 script.
 
 The order of operations when you index is:
@@ -367,7 +367,7 @@ A few things to note:
 
 !!! warning "Arrays come back transposed"
     numpy is **row-major**, Julia is **column-major**. The zero-copy conversion
-    ([`numpy2jl`](@ref), via DLPack) therefore returns an array whose **dimensions are
+    ([`numpy2jl`](@ref)) therefore returns an array whose **dimensions are
     reversed** relative to the Python side: a numpy array of shape `(d₁, …, dₙ)` becomes a
     Julia array of size `(dₙ, …, d₁)`.
 
@@ -598,4 +598,4 @@ guide for the mechanics and tradeoffs.
 
 A complete example — `mapobs` transform, `num_workers`, and a training loop, benchmarked
 against PyTorch — lives in
-[`examples/flux_mnist/`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/examples/flux_mnist).
+[`perf/flux_mnist/`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/perf/flux_mnist).

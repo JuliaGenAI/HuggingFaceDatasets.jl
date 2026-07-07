@@ -39,7 +39,7 @@ that lazily converts observations to Julia types).
   `from_csv`/`from_json`/`from_parquet`) that re-wrap results in the default
   `"julia"` format.
 - `src/transforms.jl` — `py2jl` / `numpy2jl` / `jl2numpy` / `jl2py`. `py2jl`
-  recursively converts Python containers, numpy arrays (copyless via DLPack), and
+  recursively converts Python containers, numpy arrays (copyless, zero-copy), and
   PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
   format is numpy-backed, so numeric array columns decode to real N-D Julia arrays
   and image columns decode to raw numeric arrays (not `Colorant` colorviews).

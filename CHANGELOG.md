@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Dropped the `DLPack` dependency. `numpy2jl` (the zero-copy numpy → Julia conversion behind
+  `py2jl`) now shares the buffer through PythonCall directly (`PyArray` + `unsafe_wrap`), still
+  returning a genuine `Array` so results stay on Julia's fast paths (BLAS, GPU host→device copies).
+  Behavior is unchanged — zero-copy, write-back, reversed axes; read-only/non-contiguous buffers are
+  still copied. A bonus fix: buffer cleanup now routes through PythonCall's GIL-deferred decref
+  instead of DLPack's GIL-reentering finalizer, so a numpy buffer freed on a `DataLoader`
+  `parallel=true` worker thread can no longer deadlock against a thread compiling under the GIL.
+
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
   loading, including over `mapobs`/`ObsView`-wrapped datasets. Building on the `Serialization`

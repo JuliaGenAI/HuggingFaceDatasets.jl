@@ -3,7 +3,6 @@ module HuggingFaceDatasets
 using PythonCall
 using Compat: @compat
 using MLCore: getobs
-using DLPack: DLPack
 using ImageCore: colorview, RGB, Gray, N0f8
 using Tables: Tables
 
