@@ -26,7 +26,7 @@ pkg> add HuggingFaceDatasets
 
 HuggingFaceDatasets.jl provides wrappers around types from the `datasets` python package (e.g. `Dataset` and `DatasetDict`) along with a few related methods.
 
-Check out the [examples/](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/examples) folder for usage examples.
+Check out the [perf/](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/perf) folder for usage examples and data-loading benchmarks.
 
 Observations are returned in the `"julia"` format by default, i.e. converted to native julia types on access:
 

@@ -13,4 +13,4 @@ HuggingFaceDatasets = {path = "../.."}
 
 [compat]
 DataStructures = "0.19"
-MLUtils = "0.4"
+MLUtils = "0.4.12"

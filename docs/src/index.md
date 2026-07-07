@@ -86,7 +86,7 @@ Python: {'label': 5}
 See the [Guide](@ref) for the transform workflow, method forwarding, array/image
 orientation, and integration with MLUtils/Flux data loaders. Runnable examples
 live in the
-[`examples/`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/examples)
+[`perf/`](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/tree/main/perf)
 folder.
 
 ## Troubleshooting

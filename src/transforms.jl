@@ -25,9 +25,9 @@ julia> py2jl(pytuple((1, pylist([2, 3]))))
 """
 py2jl(x) = pyconvert(Any, x)
 
-# Whether a numpy array's dtype is one DLPack (and hence `numpy2jl`) can share: bool,
+# Whether a numpy array's dtype is one `numpy2jl` can share zero-copy: bool,
 # signed/unsigned integer, float, or complex. Strings/objects/datetimes are excluded.
-_is_dlpack_numeric(x::Py) = pyconvert(String, x.dtype.kind) in ("b", "i", "u", "f", "c")
+_is_numeric_dtype(x::Py) = pyconvert(String, x.dtype.kind) in ("b", "i", "u", "f", "c")
 
 function py2jl(x::Py)
     # handle datasets
@@ -61,10 +61,10 @@ function py2jl(x::Py)
         # branch below, so a scalar reads back as a scalar rather than a `fill(x)` 0-d array.
         if pyconvert(Int, x.ndim) == 0
             return py2jl(x.item())
-        # DLPack (`numpy2jl`) only supports numeric dtypes. Non-numeric arrays (strings,
+        # Zero-copy sharing (`numpy2jl`) only supports numeric dtypes. Non-numeric arrays (strings,
         # `object` arrays from ragged columns, datetimes, ...) fall back to a nested-list
         # conversion, so a string column still comes back as a `Vector{String}`.
-        elseif _is_dlpack_numeric(x)
+        elseif _is_numeric_dtype(x)
             return numpy2jl(x)
         else
             return py2jl(x.tolist())
@@ -91,12 +91,25 @@ function py2jl(x::Py)
 end
 
 
+# Roots the Python buffer backing each zero-copy `numpy2jl` array for exactly as long as the
+# Julia `Array` that views it. The wrapper `Array` is the (weak) key, so an entry — and the
+# Python reference it holds — is dropped automatically once that array is garbage-collected;
+# `WeakKeyDict` is internally locked, so concurrent inserts/evictions are thread-safe.
+#
+# Cleanup routes through PythonCall's GIL-deferred decref (a finalizer that can't take the GIL
+# just enqueues the pointer), so — unlike DLPack's finalizer, which eagerly re-acquires the GIL
+# — a buffer freed on a `DataLoader` worker thread can never deadlock against a thread compiling
+# under the GIL.
+const _NUMPY_BUFFERS = WeakKeyDict{AbstractArray,Any}()
+
 """
     numpy2jl(x)
 
-Convert a numpy array to a Julia array using DLPack.jl.
-The conversion is copyless, and mutations to the Julia array are reflected in the numpy array.
-For row major python arrays, the returned Julia array has permuted dimensions.
+Convert a numpy array to a Julia `Array` sharing memory zero-copy. Mutations to the Julia array
+are reflected in the numpy array (and vice versa). Since numpy is row-major and Julia is
+column-major, the returned array has permuted (reversed) dimensions.
+
+Read-only or non-contiguous numpy buffers cannot be shared safely and are copied first.
 
 This function is called by [`py2jl`](@ref).
 See also [`jl2numpy`](@ref).
@@ -113,14 +126,23 @@ julia> numpy2jl(y)                      # back to a 2×3 Julia array
 ```
 """
 function numpy2jl(x::Py)
-    # DLPack cannot import a read-only numpy buffer (numpy >= 2.1 signals read-only, which
-    # this DLPack version does not support), and the numpy format hands back read-only
-    # arrays for some columns. Copy to a writable array first in that case; the copy is
-    # C-contiguous, so `from_dlpack` still reverses the axes and the orientation is correct.
-    if !pyconvert(Bool, x.flags.writeable)
+    # `unsafe_wrap` below reinterprets the buffer as a column-major contiguous `Array`, which is
+    # only valid when `x.T` is F-contiguous, i.e. when `x` is C-contiguous. Copy to a fresh,
+    # writable C-contiguous array otherwise. This also covers read-only buffers (numpy >= 2.1
+    # marks some columns read-only): aliasing read-only memory with a writable Julia array would
+    # be unsound. `x.copy()` defaults to C order, so `x.T` is F-contiguous afterwards.
+    if !pyconvert(Bool, x.flags.c_contiguous) || !pyconvert(Bool, x.flags.writeable)
         x = x.copy()
     end
-    return DLPack.from_dlpack(x)
+    # `PyArray(x.T)` is a zero-copy view with reversed axes; it holds the Python reference that
+    # keeps the buffer alive. `unsafe_wrap` then exposes that same memory as a genuine `Array`, so
+    # the result stays on Julia's fast paths (BLAS, GPU host→device copies, linear indexing) that
+    # a `PyArray` — not being a `DenseArray` — would miss. `_NUMPY_BUFFERS` roots the `PyArray` for
+    # the wrapper's lifetime so the buffer outlives every view of it.
+    p = PyArray(x.T)
+    arr = unsafe_wrap(Array, pointer(p), size(p); own = false)
+    _NUMPY_BUFFERS[arr] = p
+    return arr
 end
 
 """
