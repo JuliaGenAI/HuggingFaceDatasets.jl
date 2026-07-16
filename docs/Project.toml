@@ -9,3 +9,4 @@ HuggingFaceDatasets = {path = ".."}
 
 [compat]
 Documenter = "1.17.0"
+PythonCall = "0.9.35"
