@@ -6,3 +6,6 @@ PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [sources]
 HuggingFaceDatasets = {path = ".."}
+
+[compat]
+PythonCall = "0.9.35"
