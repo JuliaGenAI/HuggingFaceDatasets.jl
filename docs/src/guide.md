@@ -322,8 +322,8 @@ existing one. The overloads [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridg
 callback for you: each example (or batch, with `batched=true`) is converted with
 [`py2jl`](@ref) before `f` sees it, and `f`'s Julia return value is converted back to
 Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). You can therefore write a
-pure-Julia transform while still getting `datasets`' batching, caching, and
-multiprocessing:
+pure-Julia transform while still getting `datasets`' batching and caching (but not its
+multiprocessing, see below):
 
 ```julia-repl
 julia> ds = Dataset((; label=[5, 0, 4]));
@@ -360,8 +360,28 @@ A few things to note:
 - **Element types are kept.** A numeric vector returned by the callback is stored with its
   element type, so e.g. `Vector{UInt16}` token ids become a `uint16` column rather than being
   widened to `int64`.
-- **Keyword arguments** such as `batched`, `num_proc`, and `remove_columns` are forwarded
-  to the Python method, so multiprocessing and caching work as usual.
+- **Keyword arguments** such as `batched`, `batch_size`, and `remove_columns` are forwarded
+  to the Python method, so caching works as usual.
+- **No `num_proc` with a Julia function.** `datasets` runs `num_proc ≥ 1` in a pool of
+  forked worker processes, and those cannot call back into Julia (the workers die or hang),
+  so `map`/`filter` throw an `ArgumentError` for it instead (`num_proc=nothing` or `0` run
+  in-process and are fine). Two ways to parallelize:
+  - pass `batched=true` and parallelize over the batch inside the Julia function, e.g. with
+    `Threads.@threads` (start Julia with several threads, `julia -t auto`);
+  - call the underlying Python method with a function *defined in Python* (a Julia function
+    fails there just the same), then re-wrap the result:
+
+    ```julia-repl
+    julia> pyfn = pyeval("lambda b: {'label': [l + 100 for l in b['label']]}", Main);
+
+    julia> ds4 = with_format(Dataset(ds.py.map(pyfn; batched=true, num_proc=2)), "julia");
+
+    julia> ds4[:]["label"]
+    3-element Vector{Int64}:
+     105
+     100
+     104
+    ```
 - **Format is preserved.** The returned `Dataset` inherits the parent's `"julia"` format
   (or any custom `jltransform`), so `ds2` above is still `"julia"`-formatted and a chained
   pipeline like `map(f, dsj) |> ...` keeps returning Julia values.

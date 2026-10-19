@@ -580,3 +580,30 @@ end
     @test df isa Dataset
     @test sort(df[1:length(df)]["label"]) == [3, 4, 5]
 end
+
+@testset "julia map / filter reject num_proc" begin
+    ds = Dataset((; label=[5, 0, 4, 3, 2, 1]))
+    f = x -> Dict("label" => x["label"] .+ 100)
+    p = x -> x["label"] > 2
+    # `datasets` forks a worker pool for any `num_proc ≥ 1`, which cannot run a Julia callback
+    for n in (1, 2)
+        @test_throws ArgumentError map(f, ds; batched=true, num_proc=n)
+        @test_throws ArgumentError ds.map(f; batched=true, num_proc=n)
+        @test_throws ArgumentError filter(p, ds; num_proc=n)
+        @test_throws ArgumentError ds.filter(p; num_proc=n)
+    end
+    @test_throws r"ds\.py\.map\(pyfn; num_proc=2\)" map(f, ds; num_proc=2)
+
+    # `nothing` and `0` run in-process and stay accepted
+    for n in (nothing, 0)
+        @test map(f, ds; batched=true, num_proc=n)[:]["label"] == [105, 100, 104, 103, 102, 101]
+        @test length(filter(p, ds; num_proc=n)) == 3
+    end
+
+    # the suggested alternative: a function defined in Python, through the raw `ds.py` methods
+    pyfn = @pyeval("lambda b: {'label': [l + 100 for l in b['label']]}")
+    y = with_format(Dataset(ds.py.map(pyfn; batched=true, num_proc=2)), "julia")
+    @test y[:]["label"] == [105, 100, 104, 103, 102, 101]
+    pypred = @pyeval("lambda b: [l > 2 for l in b['label']]")
+    @test length(ds.py.filter(pypred; batched=true, num_proc=2)) == 3
+end
