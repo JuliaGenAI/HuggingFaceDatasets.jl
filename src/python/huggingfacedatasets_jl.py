@@ -3,6 +3,7 @@
 # `__init__`. Other Python processes import it when they unpickle a "julia"-formatted dataset
 # (see `JuliaFormatType`); they never need Julia.
 
+import numpy as np
 import pyarrow as pa
 from datasets import Value
 from datasets.formatting import NumpyFormatter, _register_formatter
@@ -25,6 +26,17 @@ class JuliaFormatter(NumpyFormatter):
     def __init__(self, features=None, token_per_repo_id=None, **np_array_kwargs):
         np_array_kwargs.setdefault("dtype", None)
         super().__init__(features=features, token_per_repo_id=token_per_repo_id, **np_array_kwargs)
+
+    def _consolidate(self, column):
+        # A batched `IterableDataset.map` re-batches rows this formatter already split into numpy
+        # scalars. Before 5.1, `datasets` consolidates those into an `object` array; stack them.
+        if (
+            isinstance(column, list)
+            and column
+            and all(isinstance(x, (np.number, np.bool_)) and x.dtype == column[0].dtype for x in column)
+        ):
+            return np.stack(column)
+        return super()._consolidate(column)
 
     def _string_columns(self, pa_table):
         # Top-level `Value("string")` columns: nothing to decode or tensorize.

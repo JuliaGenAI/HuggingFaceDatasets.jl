@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stay excluded, and so does Python 3.15: dill, which `datasets` uses to pickle functions, does
   not support it yet, so transform caching and `num_proc` with Python functions would break.
   Existing environments keep their resolved versions until they are re-resolved.
+- The Julia function given to `map`/`filter` (on a `Dataset`, `DatasetDict`, `IterableDataset` or
+  `IterableDatasetDict`) receives values converted with `py2jl`, as documented, instead of
+  PythonCall's `PyDict`/`PyArray`/`PyList` (#91). Under the `"julia"` format it sees what indexing
+  returns: a `Dict{String}` whose numeric columns are `Array`s of the column's element type, which
+  stay on Julia's fast paths (BLAS, GPU copies). Functions that rely on the `PyDict`/`PyArray` API
+  (e.g. calling `pyconvert` on a value) need updating, or can keep it through the raw Python
+  method, `ds.py.map(f)`.
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
@@ -45,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pickle` on the main task and loading this package on the workers — is handled upstream by
   MLUtils, so no wrapper type is exported here. An `@info` notes when an in-memory dataset is
   first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
+- `Dataset(::AbstractDict)`, `Dataset(::NamedTuple)` and the Tables.jl constructor accept the
+  `features`, `info` and `split` keywords of `datasets.Dataset.from_dict`, e.g.
+  `Dataset(data; features = ds.features)` (#92).
 
 ### Fixed
 - A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
@@ -89,6 +99,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preallocated matrix or N-D array and returns it for every row now gives each row its own
   values, instead of all rows sharing that array's last contents. `jl2py` now copies N-D
   arrays, as it already did for numeric vectors; `jl2numpy` still shares memory. (#94)
+- A batched `map` with a Julia function on an `IterableDataset` receives numeric columns as typed
+  arrays instead of `object` arrays of numpy scalars (with `datasets` < 5.1), so e.g.
+  `UInt8.(b["x"])` no longer throws a `MethodError` (#91).
+- Julia functions work with the `map`/`filter` options that pass extra arguments: `with_indices`
+  (0-based indices), `fn_kwargs` and `DatasetDict.map`'s `with_split`. They used to fail with a
+  `MethodError`.
+- The `Features`, `ClassLabel` and `Value` views, and the `Dataset`, `DatasetDict`,
+  `IterableDataset`, `IterableDatasetDict` and `Column` wrappers, can be passed to Python as they
+  are (#92): to forwarded methods (`ds2.cast(ds.features)`, `ds2.cast_column("x", ds.features["x"])`),
+  as keyword arguments (`ds.map(f; features = ds.features)`,
+  `Dataset.from_dict(data; features = ds.features)`), and to raw `datasets` calls, also inside a
+  Julia `Vector` or `Dict`. They used to reach Python as opaque Julia objects and fail; `Py(x)` now
+  returns the wrapped Python object.
+- `map`/`filter` with a Julia function no longer return a stale cached result after the function,
+  or a global it reads, is redefined, even in a new session (#90). `datasets` fingerprints a
+  function by pickling it, which for a Julia function records only its name. Unless you pass
+  `new_fingerprint`, each call now gets a random fingerprint and recomputes, as `datasets` does for
+  functions it cannot hash; pass `new_fingerprint` to reuse a cached result (for a `DatasetDict`, a
+  `Dict` with one fingerprint per split). A dataset backed by files gets a new cache file on every
+  call; `ds.cleanup_cache_files()` deletes the unused ones.
 
 ## [0.4.1] - 2026-07-06
 

@@ -227,12 +227,65 @@ end
     @test all(dv[k].features["y"].dtype == "uint8" for k in keys(dv))
     @test dv["train"][1:4]["y"] == [5, 0, 4, 3]
 
+    # the callback sees `py2jl` values (#91), and `with_split` passes the split name
+    seen = Ref{Any}()
+    dd.map(b -> (seen[] = b; b); batched=true)
+    @test seen[]["label"] isa Vector{Int}
+    ds = dd.map((b, split) -> Dict("split" => fill(split, length(b["label"]))); batched=true,
+                with_split=true)
+    @test ds["train"][1]["split"] == "train" && ds["test"][2]["split"] == "test"
+
     # `num_proc ≥ 1` would fork workers that cannot call back into Julia
     @test_throws ArgumentError map(x -> x, dd; num_proc=2)
     @test_throws ArgumentError dd.map(x -> x; num_proc=1)
     @test_throws ArgumentError filter(x -> true, dd; num_proc=2)
     @test_throws ArgumentError dd.filter(x -> true; num_proc=2)
     @test dd.map(x -> Dict("label" => x["label"] + 10); num_proc=0)["test"][1:2]["label"] == [11, 12]
+end
+
+@testset "julia map / filter recompute after a redefinition (DatasetDict, #90)" begin
+    dir = mktempdir()
+    DatasetDict("train" => Dataset((; x = [1, 2, 3])),
+                "test"  => Dataset((; x = [4, 5]))).save_to_disk(dir)
+    dd = load_from_disk(dir)
+    m = Module()
+    fingerprint(d) = pyconvert(String, d.py._fingerprint)
+
+    @eval m f(b) = Dict("y" => b["x"] .+ 1)
+    @test dd.map(m.f; batched=true)["test"][1:2]["y"] == [5, 6]
+    @eval m f(b) = Dict("y" => b["x"] .* 10)
+    r = dd.map(m.f; batched=true)
+    @test r["train"][1:3]["y"] == [10, 20, 30]
+    @test r["test"][1:2]["y"] == [40, 50]
+    @test fingerprint(r["train"]) != fingerprint(r["test"])
+    @eval m p(x) = x["x"] > 2
+    @test [length(v) for v in values(dd.filter(m.p))] == [1, 2]
+    @eval m p(x) = x["x"] > 4
+    @test [length(v) for v in values(filter(m.p, dd))] == [0, 1]
+
+    # per-split `new_fingerprint` (opting in to the cache) and `cache_file_names`
+    fps = Dict("train" => "f-train", "test" => "f-test")
+    @test dd.map(m.f; batched=true, new_fingerprint=fps)["test"][1:2]["y"] == [40, 50]
+    @eval m f(b) = Dict("y" => b["x"] .* 100)
+    c = dd.map(m.f; batched=true, new_fingerprint=fps)
+    @test c["train"][1:3]["y"] == [10, 20, 30] && c["test"][1:2]["y"] == [40, 50]
+    @test fingerprint(c["train"]) == "f-train"
+    pfps = Dict("train" => "p-train", "test" => "p-test")
+    @test [length(v) for v in values(dd.filter(m.p; new_fingerprint=pfps))] == [0, 1]
+    @eval m p(x) = true
+    @test [length(v) for v in values(dd.filter(m.p; new_fingerprint=pfps))] == [0, 1]
+    @test [length(v) for v in values(dd.filter(m.p))] == [3, 2]
+    @test_throws ArgumentError dd.map(m.f; new_fingerprint="shared")
+    @test_throws ArgumentError dd.filter(m.p; cache_file_names="file.arrow")
+    files = Dict(k => joinpath(dir, "$k.arrow") for k in keys(dd))
+    n = dd.map(m.f; batched=true, cache_file_names=files)
+    @test all(only(n[k].cache_files)["filename"] == files[k] for k in keys(dd))
+    @test n["test"][1:2]["y"] == [400, 500]
+
+    # each split keeps its own transform
+    dj = with_jltransform(dd, Dict("train" => py2jl, "test" => identity))
+    @test dj.map(m.f; batched=true)["test"][1:2] isa Py
+    @test dj.filter(m.p)["train"].jltransform === py2jl
 end
 
 @testset "keys/length are cached and stay correct" begin

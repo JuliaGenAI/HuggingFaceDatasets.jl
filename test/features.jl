@@ -111,4 +111,45 @@ end
     @test class_names(ds, "label") == ["neg", "pos"]
     @test int2str(ds, "label", 0) == "neg"
     @test int2str(ds, "label", 1) == "pos"
+
+    # ... or pass the views as they are
+    ds = Dataset(Dict("label" => [0, 1, 1, 0], "x" => [1, 2, 3, 4]); features = sch)
+    @test class_names(ds, "label") == ["neg", "pos"]
+end
+
+@testset "wrapper types pass straight to Python (#92)" begin
+    ds  = Dataset((; x = UInt16[1, 2]))
+    ds2 = Dataset((; x = [1, 2]))
+    dtype(d) = d.features["x"].dtype
+
+    f, col = ds.features, ds["x"]
+    @test pyis(Py(f), f.py)
+    @test pyis(Py(f["x"]), getfield(f["x"], :py))
+    @test pyis(Py(ds), ds.py)
+    @test pyis(Py(col), col.py)
+
+    # forwarded methods
+    @test dtype(ds2.cast(ds.features)) == "uint16"
+    @test dtype(ds2.cast_column("x", ds.features["x"])) == "uint16"
+    @test dtype(ds2.add_column("y", ds["x"]).rename_column("x", "z").rename_column("y", "x")) == "uint16"
+
+    # keyword arguments of the Julia `map` bridges and constructors
+    @test dtype(ds2.map(b -> b; features = ds.features)) == "uint16"
+    @test ds2.map(b -> b; batched = true, features = ds.features)[1:2]["x"] == UInt16[1, 2]
+    @test dtype(DatasetDict("a" => ds2).map(b -> b; features = ds.features)["a"]) == "uint16"
+    it = ds2.to_iterable_dataset().map(b -> b; features = ds.features)
+    @test pyconvert(String, it.py.features["x"].dtype) == "uint16"
+    @test dtype(Dataset.from_dict(Dict("x" => [1, 2]); features = ds.features)) == "uint16"
+    r = Dataset(Dict("x" => [1, 2]); features = ds.features, split = "train")
+    @test dtype(r) == "uint16" && r[1:2]["x"] isa Vector{UInt16}
+    @test r.split == "train"
+    @test dtype(Dataset((; x = [1, 2]); features = ds.features)) == "uint16"
+    @test dtype(Dataset([(x = 1,), (x = 2,)]; features = ds.features)) == "uint16"   # a row table
+    @test Dataset((; x = [1, 2]); features = ds.features, jltransform = identity)[1:2] isa Py
+
+    # raw Python calls, including through a Julia container
+    py = datasets.Dataset.from_dict(pydict(Dict("x" => pylist([1, 2]))); features = ds.features)
+    @test pyconvert(String, py.features["x"].dtype) == "uint16"
+    @test pylen(datasets.concatenate_datasets([ds, ds2.cast(ds.features)])) == 4
+    @test concatenate_datasets([ds, ds])[:]["x"] == UInt16[1, 2, 1, 2]
 end

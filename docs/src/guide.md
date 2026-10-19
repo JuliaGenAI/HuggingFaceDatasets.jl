@@ -209,9 +209,17 @@ julia> int2str(ds, "label", [0, 1, 1])   # decode a batch of ids in one call
 
 Reach these as `HuggingFaceDatasets.class_names` etc., or bring them into scope with
 `using HuggingFaceDatasets: class_names, int2str, str2int`. To **construct** a schema from
-Julia — e.g. to pass as a `features=` argument — build the wrapper types (also public but
-unexported: `HuggingFaceDatasets.ClassLabel(names=["neg", "pos"])`,
-`HuggingFaceDatasets.Value("int64")`) and hand them back to Python with [`jl2py`](@ref).
+Julia — e.g. to pass as a `features=` argument — build the wrapper types
+(`ClassLabel(names=["neg", "pos"])`, `HuggingFaceDatasets.Value("int64")`, `Features(…)`).
+These views, like a dataset's own `ds.features`, can be passed to Python methods as they are:
+
+```julia
+julia> sch = Features(Dict("label" => ClassLabel(names=["neg", "pos"])));
+
+julia> ds = Dataset((; label=[0, 1, 1]); features=sch);   # also `Dataset.from_dict(…; features=…)`
+
+julia> ds2 = Dataset((; label=[1, 0])).cast(ds.features);  # or `.cast_column("label", ds.features["label"])`
+```
 
 ## The `"julia"` format and transforms
 
@@ -326,9 +334,10 @@ the copy does not affect the original.
 existing one. The overloads [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridge the
 callback for you: each example (or batch, with `batched=true`) is converted with
 [`py2jl`](@ref) before `f` sees it, and `f`'s Julia return value is converted back to
-Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). You can therefore write a
-pure-Julia transform while still getting `datasets`' batching and caching (but not its
-multiprocessing, see below):
+Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). Under the `"julia"` format, `f`
+sees what indexing returns: a `Dict` of Julia `Array`s (of each column's element type),
+`String`s and numbers. You can therefore write a pure-Julia transform while still getting
+`datasets`' batching and (opt-in) caching, but not its multiprocessing (see below):
 
 ```julia-repl
 julia> ds = Dataset((; label=[5, 0, 4]));
@@ -366,7 +375,24 @@ A few things to note:
   with its element type, so e.g. a `Float32` becomes a `float32` column and `Vector{UInt16}`
   token ids a `uint16` column, rather than being widened to `float64`/`int64`.
 - **Keyword arguments** such as `batched`, `batch_size`, and `remove_columns` are forwarded
-  to the Python method, so caching works as usual.
+  to the Python method.
+- **Caching is opt-in.** `datasets` finds a cached result by a fingerprint of the transform,
+  computed by pickling the function. A Julia function pickles by name, so after you redefine
+  it (or change a global it reads) the old result would be silently reused, even in a new
+  session. Unless you pass `new_fingerprint`, every `map`/`filter` call with a Julia function
+  therefore gets a random fingerprint and recomputes, as `datasets` does for functions it
+  cannot hash. To reuse the cached result of an expensive step across runs, pass a
+  `new_fingerprint` string that identifies it, and change it whenever the function does:
+
+  ```julia-repl
+  julia> tok = ds.map(tokenize; batched=true, new_fingerprint="tokenize-v1");
+  ```
+
+  For a `DatasetDict`, pass a `Dict` with one fingerprint per split, like `cache_file_names`.
+  On a dataset backed by files (from `load_dataset`, `load_from_disk`, ...), every call writes
+  a new cache file next to them. `ds.cleanup_cache_files()` deletes the cache files there that
+  `ds` doesn't use, including those behind datasets an earlier `map` returned, and
+  `datasets.disable_caching()` writes them to a temporary directory instead.
 - **No `num_proc` with a Julia function.** `datasets` runs `num_proc ≥ 1` in a pool of
   forked worker processes, and those cannot call back into Julia (the workers die or hang),
   so `map`/`filter` throw an `ArgumentError` for it instead (`num_proc=nothing` or `0` run

@@ -54,9 +54,11 @@ mutable struct Dataset
 end
 
 """
-    Dataset(d::AbstractDict; jltransform = nothing)
-    Dataset(nt::NamedTuple; jltransform = nothing)
-    Dataset.from_dict(data; features = nothing, split = nothing)
+    Dataset(d::AbstractDict; features = nothing, info = nothing, split = nothing,
+            jltransform = nothing)
+    Dataset(nt::NamedTuple; features = nothing, info = nothing, split = nothing,
+            jltransform = nothing)
+    Dataset.from_dict(data; features = nothing, info = nothing, split = nothing)
 
 Build a `Dataset` from in-memory Julia data: a `Dict` or `NamedTuple` mapping column
 names to columns, delegating to `datasets.Dataset.from_dict`.
@@ -72,15 +74,18 @@ Array columns are converted with [`jl2numpy`](@ref), so the column-major/row-maj
 reversal is handled and round-trips: a single row reads back as the original Julia array
 and a range index stacks rows into a `(dims…, N)` tensor.
 
+`features`, `info` and `split` are forwarded to `datasets.Dataset.from_dict`; `features` can
+be another dataset's schema, e.g. `Dataset(data; features = ds.features)`, or a
+[`Features`](@ref) built in Julia.
+
 The dataset is returned in the `"julia"` format by default (observations converted to
 native Julia types on access). Pass a `jltransform` to install a custom transform instead,
 or call [`reset_format!`](@ref) for the raw Python observations.
 
 `Dataset.from_dict(data; kws...)` is the same construction exposed under the Python
 classmethod name (`datasets.Dataset.from_dict`): it accepts the same Julia `data` as above —
-and also a raw Python mapping — forwards keyword arguments such as `features` and `split` to
-Python, and likewise defaults to the `"julia"` format. For plain in-memory columns,
-`Dataset.from_dict(data)` is equivalent to `Dataset(data)`.
+and also a raw Python mapping — and likewise defaults to the `"julia"` format. For plain
+in-memory columns, `Dataset.from_dict(data)` is equivalent to `Dataset(data)`.
 
 See also [`with_format`](@ref), [`jl2py`](@ref), and [`jl2numpy`](@ref).
 
@@ -118,20 +123,21 @@ Dataset({
 })
 ```
 """
-Dataset(d::AbstractDict; jltransform = nothing) =
-    _from_julia_data(_from_dict_pydict(d), jltransform)
+Dataset(d::AbstractDict; jltransform = nothing, kws...) =
+    _from_julia_data(_from_dict_pydict(d), jltransform; kws...)
 
-Dataset(nt::NamedTuple; jltransform = nothing) =
-    _from_julia_data(_from_dict_pydict(nt), jltransform)
+Dataset(nt::NamedTuple; jltransform = nothing, kws...) =
+    _from_julia_data(_from_dict_pydict(nt), jltransform; kws...)
 
 """
-    Dataset(table; jltransform = nothing)
+    Dataset(table; features = nothing, info = nothing, split = nothing,
+            jltransform = nothing)
 
 Build a `Dataset` from any [Tables.jl](https://github.com/JuliaData/Tables.jl)-compatible
 source — a `DataFrame`, `CSV.File`, row table, and so on. The table is materialized to a
 column `NamedTuple` with `Tables.columntable` and then handed to the `Dataset(::NamedTuple)`
-column path, so column-name order, scalar columns, and the default `"julia"` format all
-behave exactly as for in-memory columns. This avoids the pandas dependency that
+column path, so column-name order, scalar columns, the keyword arguments, and the default
+`"julia"` format all behave exactly as for in-memory columns. This avoids the pandas dependency that
 `datasets.Dataset.from_pandas` would pull in and covers far more sources.
 
 See also [`Dataset(::AbstractDict)`](@ref) and [`with_format`](@ref).
@@ -156,18 +162,18 @@ julia> ds[1:3]["label"]
  4
 ```
 """
-function Dataset(table; jltransform = nothing)
+function Dataset(table; jltransform = nothing, kws...)
     Tables.istable(table) || throw(ArgumentError(
         "`Dataset(x)` expects a Tables.jl-compatible table, an `AbstractDict`, or a " *
         "`NamedTuple` of columns; got a $(typeof(table)), which is not a table"))
-    return Dataset(Tables.columntable(table); jltransform)
+    return Dataset(Tables.columntable(table); jltransform, kws...)
 end
 
 # Wrap a freshly built `datasets.Dataset` from Julia data. With no explicit `jltransform`
 # the dataset defaults to the `"julia"` format; passing a transform installs it instead
 # (leaving the Python format untouched, i.e. observations arrive as raw Python batches).
-function _from_julia_data(py::Py, jltransform)
-    ds = Dataset(datasets.Dataset.from_dict(py))
+function _from_julia_data(py::Py, jltransform; features = nothing, info = nothing, split = nothing)
+    ds = Dataset(datasets.Dataset.from_dict(py; features, info, split))
     return jltransform === nothing ? set_format!(ds, "julia") : set_jltransform!(ds, jltransform)
 end
 
@@ -313,14 +319,33 @@ end
 Apply `f` to `ds` through `datasets`' `map`, bridging Julia values on both sides: each
 example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees
 it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). This lets you
-write pure-Julia transforms while still getting `datasets`' batching and caching.
+write pure-Julia transforms while still getting `datasets`' batching and caching (see below).
+
+Under the default `"julia"` format, `f` sees what indexing returns: a `Dict{String}` of Julia
+values, with numeric columns as `Array`s of the column's element type (not PythonCall's
+`PyDict`/`PyArray`). Extra arguments from `datasets` (the 0-based row indices with
+`with_indices=true`, `fn_kwargs`, ...) are converted with `py2jl` as well.
 
 Keyword arguments (`batched`, `batch_size`, `remove_columns`, ...) are forwarded to the
 Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
 
 `ds.map(f; ...)` is equivalent to this `map(f, ds; ...)` (the property call routes here, not
-to Python). If you need to hand `map` a raw Python callback instead, use the underlying
-`ds.py.map(...)`.
+to Python). A Python callable `f` is handed to Python as is, like the underlying
+`ds.py.map(...)` does.
+
+!!! note "Caching"
+    `datasets` looks up a cached result by a fingerprint of the transform, which it computes by
+    pickling the function. A Julia function pickles by name, so after redefining `f`, or
+    changing a global it reads, the cached result would be silently reused, even in a new
+    session. So unless you pass `new_fingerprint`, every call gets a random fingerprint and
+    recomputes, as `datasets` does for a function it cannot hash. To reuse a cached result, pass
+    a `new_fingerprint` string that identifies this transform, and change it whenever `f` does.
+
+    For a dataset backed by files (from `load_dataset`, `load_from_disk`, ...), each call writes
+    a new cache file next to them. `ds.cleanup_cache_files()` deletes every cache file there that
+    `ds` doesn't use, including those of the datasets `map` returned; `datasets.disable_caching()`
+    writes them to a temporary directory instead. An existing `cache_file_name` is loaded as is,
+    unless `load_from_cache_file=false`.
 
 !!! warning "No multiprocessing (`num_proc`)"
     `datasets` runs `num_proc ≥ 1` in forked worker processes, which cannot call back into
@@ -346,23 +371,24 @@ julia> ds2[1:3]["label"]
  104
 ```
 """
-function Base.map(f, ds::Dataset; kws...)
+function Base.map(f, ds::Dataset; new_fingerprint = nothing, kws...)
     _check_num_proc(:map; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(ds, :py).map(g; kws...)
+    fp = _fingerprint(f, new_fingerprint)
+    y = getfield(ds, :py).map(_pycallback(f); new_fingerprint = fp, kws...)
     return Dataset(y, getfield(ds, :jltransform))
 end
 
 """
     filter(f, ds::Dataset; kws...)
 
-Filter `ds` through `datasets`' `filter`, bridging Julia values: each example (or batch,
-with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f` returns
-a `Bool` (or, when `batched=true`, a `Vector{Bool}`), converted back to Python with
-[`jl2py`](@ref).
+Filter `ds` through `datasets`' `filter`, bridging Julia values as [`map`](@ref) does: each
+example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it,
+and `f` returns a `Bool` (or, when `batched=true`, a vector of `Bool`s), converted back to
+Python with [`jl2py`](@ref).
 
 Keyword arguments are forwarded to the Python `filter`; the parent's julia format/transform
-is preserved on the returned `Dataset`.
+is preserved on the returned `Dataset`. Like [`map`](@ref), each call recomputes unless you pass
+a `new_fingerprint`.
 
 `ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`; use the underlying
 `ds.py.filter(...)` for a raw Python callback.
@@ -373,12 +399,19 @@ defined in Python instead.
 
 See also [`map`](@ref).
 """
-function Base.filter(f, ds::Dataset; kws...)
+function Base.filter(f, ds::Dataset; new_fingerprint = nothing, kws...)
     _check_num_proc(:filter; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(ds, :py).filter(g; kws...)
+    fp = _fingerprint(f, new_fingerprint)
+    y = getfield(ds, :py).filter(_pycallback(f); new_fingerprint = fp, kws...)
     return Dataset(y, getfield(ds, :jltransform))
 end
+
+# `datasets` fingerprints a transform by pickling it, and a Julia function pickles by name: a
+# redefined function, or a changed global, would hit the stale cache. Like `datasets` does for a
+# function it can't hash, use a random fingerprint unless the caller gives one. `datasets` can
+# hash a Python callable.
+_fingerprint(f, fp) = fp === nothing ? datasets.fingerprint.generate_random_fingerprint() : fp
+_fingerprint(f::Py, fp) = fp
 
 # `datasets` runs `map`/`filter` with `num_proc ≥ 1` (even 1) in a pool of forked worker
 # processes, where calling back into the Julia function makes the workers die or hang.

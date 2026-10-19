@@ -17,6 +17,9 @@ that lazily converts observations to Julia types).
   Python module handles (`datasets`, `PIL`, `np`, `copy`, `pickle`), initialized in
   `__init__` via `PythonCall.pycopy!`. Python modules must be imported there,
   not at module top level (PythonCall restriction — see the comment in the file).
+  It also declares every wrapper type (`Dataset`, …, `Column`, `Features`, `ClassLabel`,
+  `Value`) a PythonCall custom wrapper (`ispy`/`Py`), so passing one to any Python call
+  (argument, keyword, container element) hands Python the wrapped object.
 - `src/python/huggingfacedatasets_jl.py` — the Python `datasets` formatter behind the
   `"julia"` format (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's
   Arrow dtype and reads top-level string columns straight from Arrow as `object` arrays of
@@ -61,7 +64,7 @@ that lazily converts observations to Julia types).
   `cl.int2str`, `v.dtype`). Handled at the access site (a `:features` branch in
   `Dataset`'s `getproperty`), never in the `py2jl` batch hot path. Also the Julian
   label-decoding helpers `class_names`/`int2str`/`str2int` (`(ds, col, …)`), and
-  `jl2py` overloads so a Julia-built schema round-trips into a `features=` argument.
+  `jl2py` overloads that unwrap the views.
   Everything here is public but unexported; the Pythonic idioms are primary.
 - `src/serialization.jl` — `Serialization.serialize`/`deserialize` for `Dataset`,
   so it can cross a process boundary (process-parallel data loaders). Never
@@ -69,7 +72,9 @@ that lazily converts observations to Julia types).
   (on-disk datasets pickle by reference to their mmapped Arrow `cache_files`;
   in-memory ones are materialized to a temp Arrow dir once, fingerprint-cached).
 - `src/callable.jl` — small helper for method forwarding to the wrapped Python
-  object. The `getobs`/`numobs` observation interface comes from `MLCore` (≥ 1.1);
+  object, and `_pycallback`, which wraps the Julia function of every `map`/`filter` as a
+  Python function (`pyfunc`, so it receives raw `Py`s to convert with `py2jl`). The
+  `getobs`/`numobs` observation interface comes from `MLCore` (≥ 1.1);
   `getobs(::Py, ::Integer)` is provided by MLCore's `PythonCall` extension, so the
   package no longer carries its own (pirate) method for it.
 

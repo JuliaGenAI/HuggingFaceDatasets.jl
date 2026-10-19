@@ -648,6 +648,85 @@ end
     @test sort(df[1:length(df)]["label"]) == [3, 4, 5]
 end
 
+@testset "map / filter callbacks see py2jl values (#91)" begin
+    ds = Dataset((; x = UInt16[1, 2, 3, 4], f = Float32[1, 2, 3, 4], s = ["a", "b", "c", "d"]))
+    seen = Ref{Any}()
+
+    ds.map(b -> (seen[] = b; b); batched=true)
+    @test seen[] isa Dict{String}
+    @test seen[]["x"] isa Vector{UInt16} && seen[]["x"] == 1:4    # an `Array`, not a `PyArray`
+    @test seen[]["f"] isa Vector{Float32}
+    @test seen[]["s"] isa Vector{String} && seen[]["s"] == ["a", "b", "c", "d"]
+
+    ds.map(x -> (seen[] = x; nothing))                             # one row: scalars keep their type
+    @test seen[] == Dict("x" => UInt16(4), "f" => 4.0f0, "s" => "d")
+    @test seen[]["x"] isa UInt16 && seen[]["f"] isa Float32
+
+    filter(b -> (seen[] = b; b["x"] .> 2), ds; batched=true)
+    @test seen[]["x"] isa Vector{UInt16}
+
+    # extra arguments from `datasets` are converted too: 0-based indices, `fn_kwargs`
+    r = ds.map((b, i; k) -> Dict("i" => i .+ k); batched=true, with_indices=true,
+               fn_kwargs=Dict("k" => 10))
+    @test r[:]["i"] == [10, 11, 12, 13]
+    @test ds.map((x, i) -> Dict("i" => i); with_indices=true)[:]["i"] == [0, 1, 2, 3]
+    @test length(ds.filter((x, i) -> isodd(i); with_indices=true)) == 2
+
+    # a Python callable is passed as is, and gets the Python batch
+    r = ds.map(@pyeval("lambda b: {'t': [type(b).__name__] * len(b['x'])}"); batched=true)
+    @test r[1]["t"] == "dict"
+end
+
+@testset "julia map / filter recompute after a redefinition (#90)" begin
+    dir = mktempdir()
+    Dataset((; x = collect(1:10))).save_to_disk(joinpath(dir, "d"))
+    ds = load_from_disk(joinpath(dir, "d"))       # on disk, so `map` writes cache files
+    m = Module()
+    fingerprint(d) = pyconvert(String, d.py._fingerprint)
+
+    @eval m f(b) = Dict("y" => b["x"] .+ 1)
+    @test ds.map(m.f; batched=true)[1:3]["y"] == [2, 3, 4]
+    @eval m f(b) = Dict("y" => b["x"] .* 1000)
+    r = ds.map(m.f; batched=true)
+    @test r[1:3]["y"] == [1000, 2000, 3000]
+    # downstream steps, keyed on the output fingerprint, don't hit a stale cache either
+    @test fingerprint(r) != fingerprint(ds.map(m.f; batched=true))
+
+    # a global the function reads
+    @eval m k = [1]
+    @eval m g(b) = Dict("y" => b["x"] .+ k[1])
+    @test ds.map(m.g; batched=true)[1:2]["y"] == [2, 3]
+    m.k[1] = 100
+    @test ds.map(m.g; batched=true)[1:2]["y"] == [101, 102]
+    @eval m p(x) = x["x"] > k[1]
+    @test length(ds.filter(m.p)) == 0
+    m.k[1] = 8
+    @test length(ds.filter(m.p)) == 2
+
+    # an explicit `new_fingerprint` opts in to the cache
+    @test ds.map(m.g; batched=true, new_fingerprint="g-v1")[1:2]["y"] == [9, 10]
+    m.k[1] = 0
+    c = ds.map(m.g; batched=true, new_fingerprint="g-v1")
+    @test c[1:2]["y"] == [9, 10]
+    @test fingerprint(c) == "g-v1"
+    @test basename(only(c.cache_files)["filename"]) == "cache-g-v1.arrow"
+    @test length(ds.filter(m.p; new_fingerprint="p-v1")) == 10
+    m.k[1] = 5
+    @test length(ds.filter(m.p; new_fingerprint="p-v1")) == 10
+    @test length(ds.filter(m.p)) == 5
+
+    # `datasets` fingerprints a Python callable itself
+    pyf = @pyeval("lambda b: {'y': [v + 1 for v in b['x']]}")
+    @test fingerprint(ds.map(pyf; batched=true)) == fingerprint(ds.map(pyf; batched=true))
+
+    # cache files are still written, `cache_file_name` is honored, and can be cleaned up
+    file = joinpath(dir, "mine.arrow")
+    @test only(ds.map(m.g; batched=true, cache_file_name=file).cache_files)["filename"] == file
+    @test count(startswith("cache-"), readdir(joinpath(dir, "d"))) > 2
+    @test ds.cleanup_cache_files() > 2
+    @test count(startswith("cache-"), readdir(joinpath(dir, "d"))) == 0
+end
+
 @testset "julia map / filter reject num_proc" begin
     ds = Dataset((; label=[5, 0, 4, 3, 2, 1]))
     f = x -> Dict("label" => x["label"] .+ 100)

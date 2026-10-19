@@ -1,9 +1,9 @@
 # Module-level wrappers for the top-level Python `datasets` surface that is not reachable as
-# a method on a `Dataset`/`DatasetDict`. Each wrapper unwraps its `Dataset`/`DatasetDict`
-# arguments to the underlying Python object (via the `jl2py` overloads in `transforms.jl`),
-# calls the Python function, and re-wraps the result with `_wrap_toplevel` — the same
-# one-rewrap boundary the `Dataset` methods already provide, so results come back with
-# 1-based indexing, the `"julia"` format, and further method forwarding.
+# a method on a `Dataset`/`DatasetDict`. Each wrapper calls the Python function (wrapper types
+# among the arguments reach Python as their underlying objects, see `HuggingFaceDatasets.jl`)
+# and re-wraps the result with `_wrap_toplevel` — the same one-rewrap boundary the `Dataset`
+# methods already provide, so results come back with 1-based indexing, the `"julia"` format,
+# and further method forwarding.
 
 # Re-wrap a top-level Python result. A `datasets.Dataset`/`DatasetDict` comes back in the
 # default `"julia"` format (like `load_dataset` and the `Dataset` constructors, so
@@ -50,7 +50,7 @@ julia> ds[:]["label"]
 ```
 """
 function concatenate_datasets(dsets::AbstractVector; kws...)
-    return _wrap_toplevel(datasets.concatenate_datasets(jl2py(dsets); kws...))
+    return _wrap_toplevel(datasets.concatenate_datasets(pylist(dsets); kws...))
 end
 
 concatenate_datasets(dsets::Dataset...; kws...) = concatenate_datasets(collect(dsets); kws...)
@@ -90,7 +90,7 @@ julia> ds[:]["label"]
 ```
 """
 function interleave_datasets(dsets::AbstractVector; kws...)
-    return _wrap_toplevel(datasets.interleave_datasets(jl2py(dsets); kws...))
+    return _wrap_toplevel(datasets.interleave_datasets(pylist(dsets); kws...))
 end
 
 interleave_datasets(dsets::Dataset...; kws...) = interleave_datasets(collect(dsets); kws...)

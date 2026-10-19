@@ -7,9 +7,9 @@
 # Each type is `Py`-backed and forwards attribute/method access to the wrapped Python object
 # (mirroring `Dataset`/`Column`), so the full Python surface (`.names`, `.num_classes`,
 # `.int2str`, `.dtype`, ...) stays reachable under the same names, with results re-wrapped by
-# `py2jl`. The matching `jl2py` overloads (in `transforms.jl`) unwrap them back to `.py`, so a
-# view built or fetched in Julia can be handed straight back to Python (e.g. a `features=`
-# schema argument).
+# `py2jl`. They are PythonCall wrappers (see `HuggingFaceDatasets.jl`), so a view built or
+# fetched in Julia can be passed straight to Python, e.g. as a `features=` schema argument;
+# `jl2py` unwraps them as well.
 
 """
     ClassLabel(; names, num_classes)
@@ -97,8 +97,9 @@ feature type. `Features <: AbstractDict{String, Any}`, so it indexes, iterates, 
 features, `Image`, `Audio`, `Sequence`, ...).
 
 Obtained from a dataset via `ds.features` (or the [`features`](@ref) function), or built from
-Julia (`Features(Dict("label" => ClassLabel(names=["neg", "pos"])))`) and passed back to Python
-as a `features=` schema argument.
+Julia (`Features(Dict("label" => ClassLabel(names=["neg", "pos"])))`). Like the leaves, it can be
+passed to any Python method as is, e.g. `ds2.cast(ds.features)` or
+`Dataset(data; features = ds.features)`.
 
 The column names are cached at construction, so `keys`/`length`/iteration never call Python
 (safe from the REPL's async `feat[<TAB>` completion, mirroring [`DatasetDict`](@ref)).
@@ -280,10 +281,8 @@ julia> str2int(ds, "label", "dog")
 """
 str2int(ds::Dataset, col, s) = py2jl(_classlabel(ds, col).py.str2int(jl2py(s)))
 
-# `jl2py` for the schema views: unwrap back to the underlying Python object so a
-# `Features`/`ClassLabel`/`Value` built or fetched in Julia can be handed back to Python
-# (e.g. a `features=` schema argument). Defined here, after the types; `jl2py`'s other methods
-# live in `transforms.jl`.
+# `jl2py` for the schema views: unwrap back to the underlying Python object. Defined here, after
+# the types; `jl2py`'s other methods live in `transforms.jl`.
 jl2py(x::Features)   = getfield(x, :py)
 jl2py(x::ClassLabel) = getfield(x, :py)
 jl2py(x::Value)      = getfield(x, :py)
