@@ -359,9 +359,9 @@ A few things to note:
   batch (a `Dict` mapping each column to a vector). Return the same shape: a scalar
   (`map`) / `Bool` (`filter`) per example, or a vector per column / `Vector{Bool}` when
   batched.
-- **Element types are kept.** A numeric vector returned by the callback is stored with its
-  element type, so e.g. `Vector{UInt16}` token ids become a `uint16` column rather than being
-  widened to `int64`.
+- **Element types are kept.** A number or numeric vector returned by the callback is stored
+  with its element type, so e.g. a `Float32` becomes a `float32` column and `Vector{UInt16}`
+  token ids a `uint16` column, rather than being widened to `float64`/`int64`.
 - **Keyword arguments** such as `batched`, `batch_size`, and `remove_columns` are forwarded
   to the Python method, so caching works as usual.
 - **No `num_proc` with a Julia function.** `datasets` runs `num_proc ≥ 1` in a pool of
