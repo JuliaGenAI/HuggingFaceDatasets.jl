@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type of numeric columns: `Dataset((; x = Float32[1, 2]))` has a `float32` column (was
   `float64`), and `UInt8`/`Int32`/`Float16` columns are no longer widened to `int64`/`float64`.
   Batched `filter` masks are passed as numpy bool arrays. (#80)
+- The Python dependencies admit `datasets` 5 (`>=4.0, <6`) and Python 3.14, which new
+  environments now resolve to (previously Python was capped below 3.14). Free-threaded builds
+  stay excluded, and so does Python 3.15: dill, which `datasets` uses to pickle functions, does
+  not support it yet, so transform caching and `num_proc` with Python functions would break.
+  Existing environments keep their resolved versions until they are re-resolved.
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel

@@ -77,6 +77,10 @@ Managed by [CondaPkg.jl](https://github.com/JuliaPy/CondaPkg.jl) via
 - `python-gil` keeps the env on a GIL-enabled CPython, excluding conda-forge's
   free-threaded (no-GIL) builds (e.g. `cp314t`): PythonCall's free-threading support
   is experimental, and `datasets`' C extensions re-enable the GIL there anyway.
+- `python` is capped at `<3.15`, so fresh envs resolve to 3.14: dill ≤ 0.4.1 can't pickle
+  functions on 3.15 (`co_lnotab` was removed), which breaks `datasets`' transform
+  fingerprinting and `num_proc` with Python functions. Lift the cap once a dill release
+  ships the fix (dill#753).
 - Python ≥ 3.14 defaults to the `forkserver` start method, so `datasets` lazily
   spawns multiprocessing's resource tracker. Spawned while stdout is captured (as in a
   Documenter doctest) it inherits the capture pipe and the capture never finishes, so
