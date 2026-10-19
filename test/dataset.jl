@@ -677,20 +677,36 @@ end
     @test r[1]["t"] == "dict"
 end
 
-@testset "julia map / filter recompute after a redefinition (#90)" begin
+@testset "julia map / filter cache by what the function does (#90)" begin
     dir = mktempdir()
     Dataset((; x = collect(1:10))).save_to_disk(joinpath(dir, "d"))
     ds = load_from_disk(joinpath(dir, "d"))       # on disk, so `map` writes cache files
     m = Module()
     fingerprint(d) = pyconvert(String, d.py._fingerprint)
+    ncache() = count(startswith("cache-"), readdir(joinpath(dir, "d")))
 
     @eval m f(b) = Dict("y" => b["x"] .+ 1)
-    @test ds.map(m.f; batched=true)[1:3]["y"] == [2, 3, 4]
+    r1 = ds.map(m.f; batched=true)
+    @test r1[1:3]["y"] == [2, 3, 4]
+    # the same function reuses the cached result ...
+    n = ncache()
+    @test fingerprint(ds.map(m.f; batched=true)) == fingerprint(r1)
+    @test ncache() == n
+    # ... until it is redefined
     @eval m f(b) = Dict("y" => b["x"] .* 1000)
     r = ds.map(m.f; batched=true)
     @test r[1:3]["y"] == [1000, 2000, 3000]
-    # downstream steps, keyed on the output fingerprint, don't hit a stale cache either
-    @test fingerprint(r) != fingerprint(ds.map(m.f; batched=true))
+    @test fingerprint(r) != fingerprint(r1)
+    @test ds.map((x, i) -> Dict("i" => i); with_indices=true)[1:2]["i"] == [0, 1]
+
+    # a function that can't be hashed is recomputed on every call
+    ch = Channel(1)
+    u = b -> (isopen(ch); Dict("y" => b["x"]))
+    r2 = @test_logs (:info, r"can't fingerprint") ds.map(u; batched=true)
+    @test fingerprint(r2) != fingerprint(ds.map(u; batched=true))
+    # and so is any function on an in-memory dataset, which `datasets` doesn't cache
+    dm = Dataset((; x = [1, 2]))
+    @test fingerprint(dm.map(m.f; batched=true)) != fingerprint(dm.map(m.f; batched=true))
 
     # a global the function reads
     @eval m k = [1]

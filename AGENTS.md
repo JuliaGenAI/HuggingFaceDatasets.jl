@@ -14,7 +14,8 @@ that lazily converts observations to Julia types).
 ## Layout
 
 - `src/HuggingFaceDatasets.jl` — module entry point. Holds the lazily-imported
-  Python module handles (`datasets`, `PIL`, `np`, `copy`, `pickle`), initialized in
+  Python module handles (`datasets`, `PIL`, `np`, `copy`, `pickle`, and `pyhfds` for this
+  package's own `python/huggingfacedatasets_jl.py`), initialized in
   `__init__` via `PythonCall.pycopy!`. Python modules must be imported there,
   not at module top level (PythonCall restriction — see the comment in the file).
   It also declares every wrapper type (`Dataset`, …, `Column`, `Features`, `ClassLabel`,
@@ -29,7 +30,9 @@ that lazily converts observations to Julia types).
   `"julia"`-formatted dataset references the module and unpickling it registers the
   formatter: this is how `datasets`' spawned `num_proc` workers (Windows) get the format
   without Julia. A plain Python process without that `sys.path` entry doesn't know
-  `"julia"`, so `save_to_disk` (src/serialization.jl) saves `"julia"` as `"numpy"`.
+  `"julia"`, so `save_to_disk` (src/serialization.jl) saves `"julia"` as `"numpy"`. It also
+  defines `JuliaFunction`, the wrapper that pickles a Julia `map`/`filter` callback as its
+  content fingerprint (see `src/fingerprint.jl`).
 - `src/dataset.jl` — `Dataset`, the wrapper over `datasets.Dataset`. 1-based
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).
@@ -71,6 +74,17 @@ that lazily converts observations to Julia types).
   serializes the wrapped `Py` directly; instead uses `datasets`' own pickle
   (on-disk datasets pickle by reference to their mmapped Arrow `cache_files`;
   in-memory ones are materialized to a temp Arrow dir once, fingerprint-cached).
+- `src/fingerprint.jl` — content fingerprints of the Julia functions given to `Dataset`
+  `map`/`filter`, so `datasets`' cache follows what the function does (#90). `_content_hash`
+  SHA-1-hashes the lowered code of the function and of what it uses from your own modules
+  (`Main`, script modules: callees, inner closures, user types and their methods, global
+  values), captured values, the keyword arguments, and the identity of packages it calls
+  into (version and install slug; a hash of `src/` for a developed package; Julia's version
+  for `Base` and stdlibs), plus methods from your own code on other modules' functions it
+  calls directly. Python objects are hashed with `datasets.fingerprint.Hasher`. `_transform`
+  wraps the callback in `JuliaFunction` for `datasets` to fold into its usual fingerprint, or
+  falls back to a random fingerprint when something can't be hashed (`_Unhashable`) or the
+  dataset isn't file-backed.
 - `src/callable.jl` — small helper for method forwarding to the wrapped Python
   object, and `_pycallback`, which wraps the Julia function of every `map`/`filter` as a
   Python function (`pyfunc`, so it receives raw `Py`s to convert with `py2jl`). The

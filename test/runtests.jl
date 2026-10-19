@@ -32,6 +32,10 @@ end
     include("serialization.jl")
 end
 
+@testset "fingerprint" begin
+    include("fingerprint.jl")
+end
+
 if !parse(Bool, get(ENV, "CI", "false"))
     @info "Testing larger datasets"
     @testset "larger datasets" begin

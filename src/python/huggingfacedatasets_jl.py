@@ -84,3 +84,39 @@ class JuliaFormatType(str):
 
 
 _register_formatter(JuliaFormatter, JuliaFormatType("julia"))
+
+
+class JuliaFunction:
+    """A Julia function given to `Dataset.map`/`filter`, with a fingerprint of its code and data.
+
+    `datasets` fingerprints a transform by pickling it, and a Julia function would pickle by
+    name. This wrapper pickles as its `fingerprint`, computed by HuggingFaceDatasets.jl, so the
+    cache follows what the function does. It does not unpickle into a working function.
+    """
+
+    __slots__ = ("function", "fingerprint")
+
+    def __init__(self, function, fingerprint):
+        self.function = function
+        self.fingerprint = fingerprint
+
+    def __call__(self, *args, **kwargs):
+        return self.function(*args, **kwargs)
+
+    def __reduce__(self):
+        return (_unpickled_julia_function, (self.fingerprint,))
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+def _unpickled_julia_function(fingerprint):
+    def function(*args, **kwargs):
+        raise RuntimeError(
+            "A Julia function can only be called in the Julia session that passed it to `map`/`filter`."
+        )
+
+    return function

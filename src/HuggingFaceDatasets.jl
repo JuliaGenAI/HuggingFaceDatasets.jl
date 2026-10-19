@@ -5,12 +5,14 @@ using Compat: @compat
 using MLCore: getobs
 using ImageCore: colorview, RGB, Gray, N0f8
 using Tables: Tables
+using SHA: SHA
 
 const datasets = PythonCall.pynew()
 const PIL = PythonCall.pynew()
 const np = PythonCall.pynew()
 const pycopy = PythonCall.pynew() # the python `copy` module (renamed to avoid shadowing `Base.copy`)
 const pickle = PythonCall.pynew() # used to (de)serialize `Dataset` by reference for `Distributed`
+const pyhfds = PythonCall.pynew() # this package's Python module, `python/huggingfacedatasets_jl.py`
 
 export datasets
 
@@ -64,6 +66,8 @@ export concatenate_datasets,
 
 include("serialization.jl")
 
+include("fingerprint.jl")
+
 # `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
 @compat public from_csv, from_json, from_parquet
 
@@ -108,7 +112,7 @@ function __init__()
     sys = pyimport("sys")
     pydir = pkgdir(@__MODULE__, "src", "python")
     pydir in sys.path || sys.path.append(pydir)
-    pyimport("huggingfacedatasets_jl")
+    PythonCall.pycopy!(pyhfds, pyimport("huggingfacedatasets_jl"))
 
     # Pin the already-resolved Python interpreter for any child processes.
     #
