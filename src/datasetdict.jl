@@ -235,9 +235,10 @@ value is converted back with [`jl2py`](@ref). Keyword arguments are those of `da
 `DatasetDict.map`, and each split keeps its own julia format/transform. With
 `with_split=true`, `f` gets the split name as its last positional argument.
 
-Like the `Dataset` version, every call recomputes unless you pass a `new_fingerprint`, here a
-`Dict` mapping each split name to its fingerprint, like `cache_file_names` (splits stored in
-the same directory would otherwise share a cache file).
+Results are cached like the `Dataset` version's, by a fingerprint of what `f` does. To set the
+fingerprints yourself, pass `new_fingerprint` as a `Dict` mapping each split name to its
+fingerprint, like `cache_file_names` (splits stored in the same directory would otherwise
+share a cache file).
 
 `d.map(f; ...)` is equivalent to this `map(f, d; ...)`; use `d.py.map(...)` for a raw Python
 callback.
@@ -263,8 +264,8 @@ Filter every split of `d` by the Julia predicate `f`, applied per example (Pytho
 `DatasetDict.filter`), bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) exactly as
 [`map`](@ref) does. Returns a `DatasetDict` with the same splits, each keeping its own julia
 format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`. Like
-[`map`](@ref), it rejects `num_proc ≥ 1` with an `ArgumentError`, and recomputes unless you
-pass a per-split `new_fingerprint` `Dict`.
+[`map`](@ref), it rejects `num_proc ≥ 1` with an `ArgumentError`, and caches its results (a
+`new_fingerprint` is a per-split `Dict`).
 
 !!! note
     This deliberately overrides the generic `AbstractDict` `filter` (which would filter split

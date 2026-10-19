@@ -113,12 +113,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Julia `Vector` or `Dict`. They used to reach Python as opaque Julia objects and fail; `Py(x)` now
   returns the wrapped Python object.
 - `map`/`filter` with a Julia function no longer return a stale cached result after the function,
-  or a global it reads, is redefined, even in a new session (#90). `datasets` fingerprints a
-  function by pickling it, which for a Julia function records only its name. Unless you pass
-  `new_fingerprint`, each call now gets a random fingerprint and recomputes, as `datasets` does for
-  functions it cannot hash; pass `new_fingerprint` to reuse a cached result (for a `DatasetDict`, a
-  `Dict` with one fingerprint per split). A dataset backed by files gets a new cache file on every
-  call; `ds.cleanup_cache_files()` deletes the unused ones.
+  a function it calls, or a global it reads, is redefined, even in a new session (#90).
+  `datasets` fingerprints a function by pickling it, which for a Julia function records only its
+  name. The fingerprint of a Julia function now hashes what it does, like `datasets` does for a
+  Python function: its code and that of the functions it uses from your own modules, the values
+  it captures, the globals it reads, and the versions of the packages it calls into. So a cached
+  result is reused, also across sessions, only while the code that produced it is unchanged. A
+  function capturing something that can't be hashed (e.g. a `Channel` or a pointer) is recomputed
+  on every call. `new_fingerprint` sets the fingerprint yourself (for a `DatasetDict`, a `Dict`
+  with one per split).
 
 ## [0.4.1] - 2026-07-06
 

@@ -337,7 +337,7 @@ callback for you: each example (or batch, with `batched=true`) is converted with
 Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). Under the `"julia"` format, `f`
 sees what indexing returns: a `Dict` of Julia `Array`s (of each column's element type),
 `String`s and numbers. You can therefore write a pure-Julia transform while still getting
-`datasets`' batching and (opt-in) caching, but not its multiprocessing (see below):
+`datasets`' batching and caching, but not its multiprocessing (see below):
 
 ```julia-repl
 julia> ds = Dataset((; label=[5, 0, 4]));
@@ -376,21 +376,30 @@ A few things to note:
   token ids a `uint16` column, rather than being widened to `float64`/`int64`.
 - **Keyword arguments** such as `batched`, `batch_size`, and `remove_columns` are forwarded
   to the Python method.
-- **Caching is opt-in.** `datasets` finds a cached result by a fingerprint of the transform,
-  computed by pickling the function. A Julia function pickles by name, so after you redefine
-  it (or change a global it reads) the old result would be silently reused, even in a new
-  session. Unless you pass `new_fingerprint`, every `map`/`filter` call with a Julia function
-  therefore gets a random fingerprint and recomputes, as `datasets` does for functions it
-  cannot hash. To reuse the cached result of an expensive step across runs, pass a
-  `new_fingerprint` string that identifies it, and change it whenever the function does:
+- **Caching follows the code.** On a dataset backed by files (from `load_dataset`,
+  `load_from_disk`, ...), `datasets` caches the result of `map`/`filter` and reuses it when
+  the same transform runs again, also in a later session, so rerunning a script skips an
+  expensive `tokenize` step. `datasets` recognizes a transform by a fingerprint, which it
+  computes for a Python function by pickling its code and the values it uses. A Julia function
+  would pickle by name only, so its fingerprint is computed in Julia, in the same spirit: it
+  hashes the code of the function and of the functions it uses from your own modules, the
+  values it captures, the globals it reads, the keyword arguments, and the packages it calls
+  into (by version, or by their source files when developed). Edit the function, a function
+  it calls, or a global it reads, and the result is recomputed.
+
+  Not tracked are methods you add to another module's function that your code only reaches
+  through other code (e.g. your `Base.iterate(::MyType)` called by `sum`), state inside
+  packages, and files or other inputs from outside Julia. A function that captures something
+  that can't be hashed (a pointer, a `Channel`, an `IO`, a Python object `datasets` can't
+  pickle, ...) is recomputed on every call. To set the fingerprint yourself, pass a
+  `new_fingerprint` string (for a `DatasetDict`, a `Dict` with one per split, like
+  `cache_file_names`); to force a recompute, pass `load_from_cache_file=false`:
 
   ```julia-repl
   julia> tok = ds.map(tokenize; batched=true, new_fingerprint="tokenize-v1");
   ```
 
-  For a `DatasetDict`, pass a `Dict` with one fingerprint per split, like `cache_file_names`.
-  On a dataset backed by files (from `load_dataset`, `load_from_disk`, ...), every call writes
-  a new cache file next to them. `ds.cleanup_cache_files()` deletes the cache files there that
+  Cache files accumulate next to the dataset's files: `ds.cleanup_cache_files()` deletes those
   `ds` doesn't use, including those behind datasets an earlier `map` returned, and
   `datasets.disable_caching()` writes them to a temporary directory instead.
 - **No `num_proc` with a Julia function.** `datasets` runs `num_proc ≥ 1` in a pool of
