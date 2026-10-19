@@ -656,3 +656,23 @@ end
     pypred = @pyeval("lambda b: [l > 2 for l in b['label']]")
     @test length(ds.py.filter(pypred; batched=true, num_proc=2)) == 3
 end
+
+@testset "python map / filter with num_proc in spawned workers" begin
+    # `datasets`' `num_proc` workers are spawned as fresh interpreters on Windows, but forked
+    # on Linux and macOS. Force spawn so that every platform checks that a worker, which never
+    # loaded this package, reads its shard of a "julia"-formatted dataset in the "julia" format.
+    mp = pyimport("multiprocess")
+    method = mp.get_start_method()
+    mp.set_start_method("spawn"; force=true)
+    try
+        ds = Dataset((; label=UInt16[5, 0, 4, 3, 2, 1]))
+        pyfn = @pyeval("lambda b: {'label': b['label'] + 100, 'dtype': [str(b['label'].dtype)] * len(b['label'])}")
+        y = with_format(Dataset(ds.py.map(pyfn; batched=true, num_proc=2)), "julia")
+        @test y[:]["label"] == UInt16[105, 100, 104, 103, 102, 101]
+        @test all(==("uint16"), y[:]["dtype"])   # not the "numpy" format's int64
+        pypred = @pyeval("lambda b: b['label'] > 2")
+        @test length(ds.py.filter(pypred; batched=true, num_proc=2)) == 3
+    finally
+        mp.set_start_method(method; force=true)
+    end
+end
