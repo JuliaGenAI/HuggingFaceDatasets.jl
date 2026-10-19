@@ -101,6 +101,15 @@ end
     @test mnist["test"].format["type"] == "numpy"   # original untouched
 end
 
+@testset "with_format(d, nothing)" begin
+    d = with_format(mnist, nothing)
+    @test d isa DatasetDict
+    @test d["test"].format["type"] === nothing
+    @test pyisinstance(d["test"][1], pytype(pydict()))
+    @test mnist["test"].format["type"] == "numpy"   # original untouched
+    @test mnist["test"][1] isa Dict
+end
+
 @testset "with_format(julia)" begin
     d = with_format(mnist, "julia")
     ds = d["test"]

@@ -21,6 +21,12 @@
     @test train isa IterableDataset
     @test collect(train) == [Dict("x" => 1), Dict("x" => 2), Dict("x" => 3)]
 
+    # opt out to raw Python observations, leaving the original untouched
+    raw = with_format(idd, nothing)
+    @test raw isa IterableDatasetDict
+    @test first(raw["train"]) isa Py
+    @test first(idd["train"]) == Dict("x" => 1)
+
     # iteration yields split-name => IterableDataset pairs
     @test all(p -> p.second isa IterableDataset, pairs(idd))
     @test Set(k for (k, v) in idd) == Set(["train", "test"])

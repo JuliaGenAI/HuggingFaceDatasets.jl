@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
   token ids per row) now produces a column of the same element type (`uint16`) instead of
   `int64`/`float64`, which stored up to 4× the data. (#80)
+- `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
+  with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
+  matching `set_format!(ds, nothing)` and the other dataset types.
 
 ## [0.4.1] - 2026-07-06
 

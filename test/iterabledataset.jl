@@ -91,6 +91,8 @@ end
     @test itds !== raw
     # the original is untouched (copy-on-write via `copy`)
     @test first(itds) == Dict("x" => 1)
+    @test first(with_format(itds, nothing)) isa Py
+    @test first(itds) == Dict("x" => 1)
 
     # opt back in
     j = with_format(raw, "julia")
