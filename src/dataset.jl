@@ -313,15 +313,22 @@ end
 Apply `f` to `ds` through `datasets`' `map`, bridging Julia values on both sides: each
 example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees
 it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). This lets you
-write pure-Julia transforms while still getting `datasets`' batching, caching, and
-multiprocessing.
+write pure-Julia transforms while still getting `datasets`' batching and caching.
 
-Keyword arguments (`batched`, `num_proc`, `remove_columns`, ...) are forwarded to the
+Keyword arguments (`batched`, `batch_size`, `remove_columns`, ...) are forwarded to the
 Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
 
 `ds.map(f; ...)` is equivalent to this `map(f, ds; ...)` (the property call routes here, not
 to Python). If you need to hand `map` a raw Python callback instead, use the underlying
 `ds.py.map(...)`.
+
+!!! warning "No multiprocessing (`num_proc`)"
+    `datasets` runs `num_proc ≥ 1` in forked worker processes, which cannot call back into
+    the Julia function `f`, so passing such a `num_proc` throws an `ArgumentError`
+    (`num_proc = nothing` or `0`, which run in-process, are accepted). To parallelize, use
+    `batched=true` with an `f` that parallelizes over the batch itself (e.g. with
+    `Threads.@threads`), or call the underlying Python method with a function *defined in
+    Python*, e.g. `ds.py.map(pyfn; num_proc=4)` (a Julia function fails there as well).
 
 See also [`filter`](@ref).
 
@@ -340,6 +347,7 @@ julia> ds2[1:3]["label"]
 ```
 """
 function Base.map(f, ds::Dataset; kws...)
+    _check_num_proc(:map; kws...)
     g = x -> jl2py(f(py2jl(x)))
     y = getfield(ds, :py).map(g; kws...)
     return Dataset(y, getfield(ds, :jltransform))
@@ -359,12 +367,31 @@ is preserved on the returned `Dataset`.
 `ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`; use the underlying
 `ds.py.filter(...)` for a raw Python callback.
 
+As with [`map`](@ref), `num_proc ≥ 1` is rejected with an `ArgumentError`: `datasets`' worker
+processes cannot call back into Julia. Use `ds.py.filter(pyfn; num_proc=N)` with a function
+defined in Python instead.
+
 See also [`map`](@ref).
 """
 function Base.filter(f, ds::Dataset; kws...)
+    _check_num_proc(:filter; kws...)
     g = x -> jl2py(f(py2jl(x)))
     y = getfield(ds, :py).filter(g; kws...)
     return Dataset(y, getfield(ds, :jltransform))
+end
+
+# `datasets` runs `map`/`filter` with `num_proc ≥ 1` (even 1) in a pool of forked worker
+# processes, where calling back into the Julia function makes the workers die or hang.
+function _check_num_proc(method::Symbol; num_proc = nothing, kws...)
+    if num_proc isa Integer && num_proc >= 1
+        throw(ArgumentError(
+            "`$method` with a Julia function does not support `num_proc=$num_proc`: `datasets` " *
+            "would run it in forked worker processes, which cannot call back into Julia. Omit " *
+            "`num_proc` (with `batched=true` the function can parallelize over each batch " *
+            "itself, e.g. with `Threads.@threads`), or call the underlying Python method with " *
+            "a function defined in Python, e.g. `ds.py.$method(pyfn; num_proc=$num_proc)`."))
+    end
+    return nothing
 end
 
 function Base.deepcopy_internal(ds::Dataset, stackdict::IdDict)

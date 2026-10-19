@@ -226,6 +226,13 @@ end
     dv = dd.map(x -> Dict("y" => UInt8.(x["label"])); batched=true)
     @test all(dv[k].features["y"].dtype == "uint8" for k in keys(dv))
     @test dv["train"][1:4]["y"] == [5, 0, 4, 3]
+
+    # `num_proc ≥ 1` would fork workers that cannot call back into Julia
+    @test_throws ArgumentError map(x -> x, dd; num_proc=2)
+    @test_throws ArgumentError dd.map(x -> x; num_proc=1)
+    @test_throws ArgumentError filter(x -> true, dd; num_proc=2)
+    @test_throws ArgumentError dd.filter(x -> true; num_proc=2)
+    @test dd.map(x -> Dict("label" => x["label"] + 10); num_proc=0)["test"][1:2]["label"] == [11, 12]
 end
 
 @testset "keys/length are cached and stay correct" begin

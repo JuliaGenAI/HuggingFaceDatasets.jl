@@ -237,9 +237,14 @@ Python `map`, and each split keeps its own julia format/transform.
 `d.map(f; ...)` is equivalent to this `map(f, d; ...)`; use `d.py.map(...)` for a raw Python
 callback.
 
+As for a `Dataset`, `num_proc ≥ 1` is rejected with an `ArgumentError`, since `datasets`'
+worker processes cannot call back into Julia; use `d.py.map(pyfn; num_proc=N)` with a
+function defined in Python instead.
+
 See also [`filter`](@ref).
 """
 function Base.map(f, d::DatasetDict; kws...)
+    _check_num_proc(:map; kws...)
     g = x -> jl2py(f(py2jl(x)))
     y = getfield(d, :py).map(g; kws...)
     return DatasetDict(y, getfield(d, :jltransform))
@@ -251,7 +256,8 @@ end
 Filter every split of `d` by the Julia predicate `f`, applied per example (Python's
 `DatasetDict.filter`), bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) exactly as
 [`map`](@ref) does. Returns a `DatasetDict` with the same splits, each keeping its own julia
-format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`.
+format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`. Like
+[`map`](@ref), it rejects `num_proc ≥ 1` with an `ArgumentError`.
 
 !!! note
     This deliberately overrides the generic `AbstractDict` `filter` (which would filter split
@@ -260,6 +266,7 @@ format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`.
     build a new one explicitly.
 """
 function Base.filter(f, d::DatasetDict; kws...)
+    _check_num_proc(:filter; kws...)
     g = x -> jl2py(f(py2jl(x)))
     y = getfield(d, :py).filter(g; kws...)
     return DatasetDict(y, getfield(d, :jltransform))

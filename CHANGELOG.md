@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
   with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
   matching `set_format!(ds, nothing)` and the other dataset types.
+- `map`/`filter` with a Julia function on a `Dataset` or `DatasetDict` (including the
+  `ds.map(...)`/`ds.filter(...)` property calls) throw an informative `ArgumentError` for
+  `num_proc ≥ 1`, instead of crashing the `datasets` worker processes, which cannot call back
+  into Julia. The error points to the alternatives: `batched=true` with a multithreaded Julia
+  function, or `ds.py.map(pyfn; num_proc=N)` with a function defined in Python.
 
 ## [0.4.1] - 2026-07-06
 
