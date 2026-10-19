@@ -18,13 +18,22 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.10'
+          - 'min'
           - '1'
           - 'nightly'
         os:
           - ubuntu-latest
           - windows-latest
           - macOS-latest
+        exclude:
+          - version: 'min'
+            os: windows-latest
+          - version: 'min'
+            os: macOS-latest
+          - version: 'nightly'
+            os: windows-latest
+          - version: 'nightly'
+            os: macOS-latest
     steps:
 
       - uses: actions/checkout@v7

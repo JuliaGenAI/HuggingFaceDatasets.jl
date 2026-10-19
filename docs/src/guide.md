@@ -252,13 +252,21 @@ Indexing by column name returns a lazy [`Column`](@ref): it behaves like a vecto
 (indexing, slicing, iteration, broadcasting) but converts elements only on access, so
 the whole column is never materialized at once. Call `collect` to get a plain `Vector`.
 
-The special `"julia"` format is backed by `datasets`' `numpy` format and sets the Julia
-transform to [`py2jl`](@ref), which recursively converts Python containers (lists, tuples,
-dicts, sets) and numpy arrays into native Julia values, copylessly when possible. Because
-the numpy format decodes array and image cells to numeric arrays, an image column comes
-back as a raw array rather than a colorview (see [Working with images](@ref)). Any other
-format string (e.g. `"numpy"`, `"torch"`, `"pandas"`) is forwarded to the underlying
-Python `set_format`, and `nothing` clears the format entirely.
+The special `"julia"` format reads data through a `"julia"` formatter that this package
+registers with `datasets` (so `ds.format["type"] == "julia"`), and sets the Julia transform
+to [`py2jl`](@ref), which recursively converts Python containers (lists, tuples, dicts, sets)
+and numpy arrays into native Julia values, copylessly when possible. The formatter is
+`datasets`' `numpy` formatter without its cast of every integer column to `int64` and every
+float column to `float32`: each column keeps its own dtype, so a `uint16` column comes back as
+`UInt16` and a `float64` column as `Float64`. Because it decodes array and image cells to
+numeric arrays, an image column comes back as a raw array rather than a colorview (see
+[Working with images](@ref)). Any other format string (e.g. `"numpy"`, `"torch"`,
+`"pandas"`) is forwarded to the underlying Python `set_format`, and `nothing` clears the
+format entirely.
+
+The `"julia"` format type exists only in Python processes that have loaded this package.
+`ds.save_to_disk(path)` therefore saves a `"julia"`-formatted dataset with the `"numpy"`
+format, so that plain Python can `load_from_disk` it.
 
 ### Custom Julia transforms
 
@@ -349,6 +357,9 @@ A few things to note:
   batch (a `Dict` mapping each column to a vector). Return the same shape: a scalar
   (`map`) / `Bool` (`filter`) per example, or a vector per column / `Vector{Bool}` when
   batched.
+- **Element types are kept.** A numeric vector returned by the callback is stored with its
+  element type, so e.g. `Vector{UInt16}` token ids become a `uint16` column rather than being
+  widened to `int64`.
 - **Keyword arguments** such as `batched`, `num_proc`, and `remove_columns` are forwarded
   to the Python method, so multiprocessing and caching work as usual.
 - **Format is preserved.** The returned `Dataset` inherits the parent's `"julia"` format
@@ -371,10 +382,10 @@ A few things to note:
     reversed** relative to the Python side: a numpy array of shape `(d₁, …, dₙ)` becomes a
     Julia array of size `(dₙ, …, d₁)`.
 
-Under the `"julia"` format (backed by `datasets`' `numpy` format) an array-valued column
-decodes to a **real N-D numeric array** rather than a nested `Vector{Vector}`, and a range
-index **stacks** the rows along the last axis into a `(dims…, N)` tensor — observation axis
-last, matching the MLUtils convention:
+Under the (numpy-based) `"julia"` format an array-valued column decodes to a **real N-D
+numeric array** rather than a nested `Vector{Vector}`, and a range index **stacks** the rows
+along the last axis into a `(dims…, N)` tensor — observation axis last, matching the MLUtils
+convention:
 
 ```jldoctest guide
 julia> ds = Dataset((; x = [[1 2 3; 4 5 6], [7 8 9; 10 11 12]]));
@@ -413,9 +424,10 @@ propagate in both directions.
 
 ## Working with images
 
-An `Image` feature (`datasets.Image`) is decoded to a numeric array by the `numpy` format
-*before* [`py2jl`](@ref) sees it, so under the `"julia"` format an image column is a **raw
-numeric array**, not an `ImageCore` colorview. Combined with the axis reversal above:
+An `Image` feature (`datasets.Image`) is decoded to a numeric array by the numpy-based
+`"julia"` formatter *before* [`py2jl`](@ref) sees it, so under the `"julia"` format an image
+column is a **raw numeric array**, not an `ImageCore` colorview. Combined with the axis
+reversal above:
 
 - a grayscale `(H, W)` image becomes a `(W, H)` `UInt8` matrix;
 - a color `(H, W, C)` image becomes a `(C, W, H)` `UInt8` array (channel axis first);

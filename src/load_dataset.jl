@@ -56,7 +56,7 @@ Dataset({
 julia> mnist[1]["label"]
 5
 
-julia> mnist[1]["image"]        # a raw (W, H) numeric array under the numpy-backed format
+julia> mnist[1]["image"]        # a raw (W, H) numeric array under the "julia" format
 28×28 Matrix{UInt8}:
 [...]
 ```

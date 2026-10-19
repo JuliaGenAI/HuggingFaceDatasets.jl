@@ -15,7 +15,7 @@ end
 
 @testset "returned attributes are converted to julia" begin
     @test mnist.format isa Dict # returned attributes are converted to julia
-    @test mnist.format["type"] == "numpy"   # loaded in the "julia" (numpy-backed) format
+    @test mnist.format["type"] == "julia"   # loaded in the "julia" format
 end
 
 @testset "firstindex / lastindex / iteration" begin
@@ -34,7 +34,7 @@ end
     ds = Dataset(Dict("label" => [5, 0, 4]))
     @test ds isa Dataset
     @test length(ds) == 3
-    @test ds.format["type"] == "numpy"                     # julia format by default
+    @test ds.format["type"] == "julia"                     # julia format by default
     @test collect(keys(pyconvert(Dict, ds.py.features))) == ["label"]
     @test ds[1] == Dict("label" => 5)
     @test ds[1:3]["label"] == [5, 0, 4]
@@ -51,7 +51,29 @@ end
     @test ds[1:2]["i"] == [1, 2]
     @test ds[1:2]["s"] == ["x", "y"]
     @test ds[1:2]["f"] == [1.5, 2.5]
+    @test ds[1:2]["f"] isa Vector{Float64}
     @test ds[1:2]["b"] == [true, false]
+
+    # numeric columns keep their element type in the schema (#80)
+    ds = Dataset((u8 = UInt8[1, 2], i32 = Int32[3, 4], f32 = Float32[1.5, 2.5],
+                  f16 = Float16[1, 2], b = [true, false], r = 1:2))
+    @test [ds.features[k].dtype for k in ds.column_names] ==
+          ["uint8", "int32", "float32", "float16", "bool", "int64"]
+    @test ds[1:2]["u8"] == [1, 2]
+    @test ds[1:2]["i32"] == [3, 4]
+    @test ds[1:2]["f32"] == [1.5, 2.5]
+    @test ds[1:2]["f16"] == [1, 2]
+    @test ds[1:2]["b"] == [true, false]
+    @test ds[2]["r"] == 2
+    @test pyconvert(String, pystr(Dataset((; x = [UInt16[1, 2], UInt16[3]])).py.features["x"])) ==
+          "List(Value('uint16'))"
+    @test Dataset((; x = Int[])).features["x"].dtype == "int64"
+
+    # the column is copied: mutating the source vector afterwards leaves the dataset intact
+    v = Float32[1, 2, 3]
+    ds = Dataset((; v))
+    v[1] = 100
+    @test ds[1:3]["v"] == [1, 2, 3]
 
     # a custom `jltransform` opts out of the default julia format (raw Python format kept)
     ds = Dataset(Dict("label" => [5, 0, 4]); jltransform = py2jl)
@@ -96,6 +118,11 @@ end
     @test ds[1:3]["text"] == ["a", "b", "c"]
     @test ds[1:3]["label"] == Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))[1:3]["label"]
 
+    # numeric columns keep their element type (#80)
+    ds = Dataset([(u = 0x01, f = 1.5f0), (u = 0x02, f = 2.5f0)])
+    @test ds.features["u"].dtype == "uint8"
+    @test ds.features["f"].dtype == "float32"
+
     # a custom `jltransform` is forwarded through the table path
     ds = Dataset(rt; jltransform = py2jl)
     @test ds.format["type"] === nothing
@@ -113,7 +140,7 @@ end
         # varargs and vector forms are equivalent; result is in the julia format
         ds = concatenate_datasets(a, b)
         @test ds isa Dataset
-        @test ds.format["type"] == "numpy"          # default julia format
+        @test ds.format["type"] == "julia"          # default julia format
         @test length(ds) == 5
         @test ds[:]["label"] == [1, 2, 3, 4, 5]
         @test concatenate_datasets([a, b])[:]["label"] == [1, 2, 3, 4, 5]
@@ -130,7 +157,7 @@ end
         y = Dataset((; label = [2, 2, 2]))
         ds = interleave_datasets(x, y)
         @test ds isa Dataset
-        @test ds.format["type"] == "numpy"
+        @test ds.format["type"] == "julia"
         @test ds[:]["label"] == [1, 2, 1, 2, 1, 2]
         @test interleave_datasets([x, y])[:]["label"] == [1, 2, 1, 2, 1, 2]
     end
@@ -139,9 +166,12 @@ end
         mktempdir() do dir
             path = joinpath(dir, "ds")
             a.save_to_disk(path)                     # write side is a forwarded method
+            # "julia" is saved as "numpy", so plain Python (without this package) can load it
+            @test occursin("\"_format_type\": \"numpy\"", read(joinpath(path, "state.json"), String))
+            @test a.format["type"] == "julia"
             loaded = load_from_disk(path)            # read side is the new top-level wrapper
             @test loaded isa Dataset
-            @test loaded.format["type"] == "numpy"   # default julia format
+            @test loaded.format["type"] == "julia"   # default julia format
             @test loaded[:]["label"] == [1, 2]
 
             # the Python classmethod name also works, via type-level getproperty
@@ -151,7 +181,8 @@ end
 
             # ... and on DatasetDict for a saved dict of splits
             dpath = joinpath(dir, "dd")
-            DatasetDict("train" => a).py.save_to_disk(dpath)
+            DatasetDict("train" => a).save_to_disk(dpath)
+            @test occursin("\"_format_type\": \"numpy\"", read(joinpath(dpath, "train", "state.json"), String))
             dd = DatasetDict.load_from_disk(dpath)
             @test dd isa DatasetDict
             @test dd["train"][:]["label"] == [1, 2]
@@ -167,7 +198,7 @@ end
             src.py.to_csv(csv)
             ds = HuggingFaceDatasets.from_csv(csv)
             @test ds isa Dataset
-            @test ds.format["type"] == "numpy"
+            @test ds.format["type"] == "julia"
             @test ds[:]["label"] == [5, 0, 4]
             @test ds[:]["text"] == ["a", "b", "c"]
             @test Dataset.from_csv(csv)[:]["label"] == [5, 0, 4]   # classmethod name
@@ -239,13 +270,26 @@ end
     @test length(x["premise"]) == 2
 
     # the originals are untouched by the copy-on-write reset
-    @test mnist.format["type"] == "numpy"
-    @test glue_ax.format["type"] == "numpy"
+    @test mnist.format["type"] == "julia"
+    @test glue_ax.format["type"] == "julia"
+end
+
+@testset "with_format(ds, nothing)" begin
+    ds = with_format(mnist, nothing)
+    @test ds isa Dataset
+    @test ds.format["type"] === nothing
+    x = ds[1]
+    @test @py isinstance(x, dict)
+    @test @py x["label"] === 7
+    @test mnist.with_format(nothing).format["type"] === nothing   # property-style form
+    # the original keeps the julia format
+    @test mnist.format["type"] == "julia"
+    @test mnist[1]["label"] == 7
 end
 
 @testset "with_format(julia) - mnist" begin
     ds = with_format(mnist, "julia")
-    @test ds.format["type"] == "numpy"  # the julia format is numpy + py2jl under the hood
+    @test ds.format["type"] == "julia"  # the "julia" Python formatter + py2jl
 
     # `ds[column]` returns a lazy `Column` view, not a materialized vector
     col = ds["label"]
@@ -277,7 +321,7 @@ end
 
 @testset "with_format(julia) - glue_ax" begin
     ds = with_format(glue_ax, "julia")
-    @test ds.format["type"] == "numpy"
+    @test ds.format["type"] == "julia"
 
     x = ds[1]
     @test x isa Dict
@@ -300,6 +344,58 @@ end
     @test all(x["premise"] .== ["The cat sat on the mat.", "The cat did not sit on the mat."])
     @test x["hypothesis"] isa AbstractVector{<:AbstractString}
     @test all(x["hypothesis"] .== ["The cat did not sit on the mat.", "The cat sat on the mat."])
+end
+
+@testset "julia format keeps each column's dtype" begin
+    # `datasets`' numpy formatter casts integers to int64 and floats to float32; the "julia"
+    # formatter keeps the Arrow dtype (#78).
+    V = datasets.Value
+    feats = datasets.Features(pydict(Dict(
+        "u16" => datasets.List(V("uint16")), "i8" => V("int8"), "i32" => V("int32"),
+        "u64" => V("uint64"), "f16" => V("float16"), "f32" => V("float32"),
+        "f64" => V("float64"), "b" => V("bool"), "rag" => datasets.List(V("int16")),
+        "a2" => datasets.Array2D((2, 3), "float64"))))
+    a2 = [rand(3, 2), rand(3, 2)]   # numpy (2, 3) after the axis reversal
+    ds = Dataset.from_dict(Dict("u16" => [[1, 2], [3, 4]], "i8" => [1, -2], "i32" => [1, 2],
+        "u64" => [1, 2], "f16" => [1.5, 2.5], "f32" => [1.5, 2.5], "f64" => [1.0000000001, 2.0],
+        "b" => [true, false], "rag" => [[1, 2, 3], [4]], "a2" => a2); features = feats)
+
+    b = ds[1:2]
+    @test b["u16"] isa Matrix{UInt16} && b["u16"] == [1 3; 2 4]
+    @test b["i8"] isa Vector{Int8} && b["i8"] == [1, -2]
+    @test b["i32"] isa Vector{Int32}
+    @test b["u64"] isa Vector{UInt64}
+    @test b["f16"] isa Vector{Float16} && b["f16"] == [1.5, 2.5]
+    @test b["f32"] isa Vector{Float32}
+    @test b["f64"] isa Vector{Float64} && b["f64"] == [1.0000000001, 2.0]
+    @test b["b"] isa Vector{Bool} && b["b"] == [true, false]
+    @test b["rag"] isa Vector{Vector{Int16}} && b["rag"] == [[1, 2, 3], [4]]
+    @test b["a2"] isa Array{Float64, 3} && b["a2"] == cat(a2...; dims = 3)
+
+    r = ds[1]
+    @test r["u16"] isa Vector{UInt16}
+    @test r["i32"] isa Int32
+    @test r["f64"] === 1.0000000001
+    @test r["a2"] == a2[1]
+    @test ds["f64"][1:2] isa Vector{Float64}   # lazy `Column` batches too
+
+    # a Float64 array column built from Julia round-trips exactly
+    x = rand(2, 3, 4)
+    @test Dataset((; x))[1:4]["x"] == x
+
+    # streaming reads go through the same formatter
+    it = ds.to_iterable_dataset()
+    r = first(it)
+    @test r["u16"] isa Vector{UInt16}
+    @test r["f64"] === 1.0000000001
+    b = py2jl(first(it.py.iter(batch_size = 2)))
+    @test b["u16"] isa Matrix{UInt16}
+    @test b["f64"] isa Vector{Float64}
+
+    # the plain "numpy" format is upstream's, casts included
+    n = with_format(ds, "numpy")[1:2]
+    @test pyconvert(String, n["u16"].dtype.name) == "int64"
+    @test pyconvert(String, n["f64"].dtype.name) == "float32"
 end
 
 @testset "python transforms" begin
@@ -328,7 +424,7 @@ end
     @test ds.format["type"] === nothing
     @test @py isinstance(ds[1], dict)
     reset_format!(ds)                          # reset -> default "julia" format
-    @test ds.format["type"] == "numpy"
+    @test ds.format["type"] == "julia"
     @test ds[1] isa Dict
     @test ds[1]["label"] == 7
 end
@@ -337,7 +433,7 @@ end
     ds = deepcopy(mnist)
     set_format!(ds, nothing)
     @test ds.format["type"] === nothing         # the copy is stripped ...
-    @test mnist.format["type"] == "numpy"        # ... the original julia format is intact
+    @test mnist.format["type"] == "julia"        # ... the original julia format is intact
     ds.set_format("numpy")
     @test ds.format["type"] == "numpy"
     set_format!(ds, nothing)
@@ -353,12 +449,12 @@ end
     @test ds.format["type"] === nothing
 
     ds.set_format("julia")                       # would error if forwarded to Python
-    @test ds.format["type"] == "numpy"           # julia format is numpy-backed
+    @test ds.format["type"] == "julia"           # the Python format type is "julia" too
     @test ds[1] isa Dict && ds[1]["label"] == 7
 
     set_format!(ds, nothing)
     ds.reset_format()                            # restores julia, not Python's strip-to-raw
-    @test ds.format["type"] == "numpy"
+    @test ds.format["type"] == "julia"
     @test ds[1] isa Dict
 
     dsj = ds.with_format("julia")                # non-mutating; returns a wrapped Dataset
@@ -371,7 +467,7 @@ end
     # matching the `Dataset(data)` constructor (orientation-aware columns, "julia" format).
     ds = Dataset.from_dict(Dict("label" => [5, 0, 4]))
     @test ds isa Dataset
-    @test ds.format["type"] == "numpy"           # default julia format, like the constructor
+    @test ds.format["type"] == "julia"           # default julia format, like the constructor
     @test ds[1] == Dict("label" => 5)
     @test ds[1:3]["label"] == [5, 0, 4]
 
@@ -452,6 +548,27 @@ end
     ds5 = filter(x -> x["label"] .< 3, dsj; batched=true)
     @test ds5[1] isa Dict{String, Int64}
     @test sort(ds5[1:length(ds5)]["label"]) == [0, 1, 2]
+    ds6 = filter(x -> Vector{Bool}(x["label"] .> 3), dsj; batched=true)
+    @test sort(ds6[1:length(ds6)]["label"]) == [4, 5]
+
+    # numeric vectors returned by `f` keep their element type (#80)
+    dv = map(b -> Dict("y" => [rand(UInt16, 4) for _ in b["label"]]), dsj;
+             batched=true, batch_size=2)
+    @test pyconvert(String, pystr(dv.py.features["y"])) == "List(Value('uint16'))"
+    dv = map(b -> Dict("y" => Int32.(b["label"])), dsj; batched=true)
+    @test dv.features["y"].dtype == "int32"
+    @test dv[1]["y"] == 5                                    # still a scalar per row
+    @test dv[1:6]["y"] == [5, 0, 4, 3, 2, 1]
+    dv = map(x -> Dict("y" => Float32[x["label"], 1]), dsj)    # one vector per row
+    @test pyconvert(String, pystr(dv.py.features["y"])) == "List(Value('float32'))"
+    @test dv[1]["y"] == [5, 1]
+    @test dv[1:2]["y"] == [5 0; 1 1]
+
+    # each returned vector is copied: a buffer reused across calls doesn't alias the rows
+    # that `datasets` holds before writing them
+    buf = zeros(Int, 2)
+    dv = map(x -> (buf .= x["label"]; Dict("y" => buf)), dsj)
+    @test [dv[i]["y"] for i in 1:6] == [fill(l, 2) for l in [5, 0, 4, 3, 2, 1]]
 
     # property-style `ds.map` / `ds.filter` route to the julia-bridged versions above
     # (python interface), i.e. `ds.map(f)` == `map(f, ds)` — the callback still sees Julia

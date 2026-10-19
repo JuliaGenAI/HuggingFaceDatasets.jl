@@ -21,6 +21,12 @@
     @test train isa IterableDataset
     @test collect(train) == [Dict("x" => 1), Dict("x" => 2), Dict("x" => 3)]
 
+    # opt out to raw Python observations, leaving the original untouched
+    raw = with_format(idd, nothing)
+    @test raw isa IterableDatasetDict
+    @test first(raw["train"]) isa Py
+    @test first(idd["train"]) == Dict("x" => 1)
+
     # iteration yields split-name => IterableDataset pairs
     @test all(p -> p.second isa IterableDataset, pairs(idd))
     @test Set(k for (k, v) in idd) == Set(["train", "test"])
@@ -34,4 +40,9 @@
     idd3 = idd.filter(row -> row["x"] > 2)
     @test collect(idd3["train"]) == [Dict("x" => 3)]
     @test collect(idd3["test"]) == [Dict("x" => 4), Dict("x" => 5)]
+
+    # batched filter with a `BitVector` mask (handed to Python as a numpy bool array)
+    idd4 = idd.filter(b -> isodd.(1:length(b["x"])); batched=true)
+    @test collect(idd4["train"]) == [Dict("x" => 1), Dict("x" => 3)]
+    @test collect(idd4["test"]) == [Dict("x" => 4)]
 end

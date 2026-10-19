@@ -17,6 +17,11 @@ that lazily converts observations to Julia types).
   Python module handles (`datasets`, `PIL`, `np`, `copy`, `pickle`), initialized in
   `__init__` via `PythonCall.pycopy!`. Python modules must be imported there,
   not at module top level (PythonCall restriction — see the comment in the file).
+- `src/julia_formatter.py` — the Python `datasets` formatter behind the `"julia"` format
+  (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's Arrow dtype),
+  registered as format type `"julia"`. Its source is read at precompile time and run in
+  `__init__`, so the format type exists only in processes that have loaded the package;
+  `save_to_disk` (src/serialization.jl) therefore saves `"julia"` as `"numpy"`.
 - `src/dataset.jl` — `Dataset`, the wrapper over `datasets.Dataset`. 1-based
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).
@@ -41,8 +46,9 @@ that lazily converts observations to Julia types).
 - `src/transforms.jl` — `py2jl` / `numpy2jl` / `jl2numpy` / `jl2py`. `py2jl`
   recursively converts Python containers, numpy arrays (copyless, zero-copy), and
   PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
-  format is numpy-backed, so numeric array columns decode to real N-D Julia arrays
-  and image columns decode to raw numeric arrays (not `Colorant` colorviews).
+  format is numpy-based, so numeric array columns decode to real N-D Julia arrays
+  (of the column's own dtype) and image columns decode to raw numeric arrays (not
+  `Colorant` colorviews).
 - `src/features.jl` — `Py`-backed views over a dataset's schema: `Features` (an
   `AbstractDict` returned by `ds.features`), and the `ClassLabel`/`Value` leaves it
   wraps, each forwarding attribute/method access to Python (`cl.names`,

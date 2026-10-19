@@ -42,8 +42,46 @@ end
     p = pylist([1, 2])
     @test jl2py(p) === p
 
-    # vectors -> python lists (element-wise), dicts/namedtuples -> python dicts
-    @test pyisinstance(jl2py([1, 2, 3]), pytype(pylist()))
+    # numeric vectors -> 1-D numpy arrays keeping their element type (#80)
+    for T in (Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64,
+              Float16, Float32, Float64)
+        x = T[1, 0, 1]
+        y = jl2py(x)
+        @test pyisinstance(y, np.ndarray)
+        @test pyconvert(String, y.dtype.name) == lowercase(string(T))
+        @test py2jl(y) == x
+    end
+
+    # lazy / non-contiguous numeric vectors are materialized to a contiguous array
+    v = collect(Int16, 1:6)
+    for x in Any[Int16(1):Int16(3), view(v, 1:2:5), view(v, 2:4), reinterpret(UInt8, v),
+                 trues(3), Int32[]]
+        y = jl2py(x)
+        @test pyisinstance(y, np.ndarray)
+        @test pyconvert(String, y.dtype.name) == lowercase(string(eltype(x)))
+        @test py2jl(y) == collect(x)
+    end
+
+    # the vector is copied, not shared: later mutations don't reach the numpy array, and
+    # the array stays valid once the Julia vector is garbage-collected
+    x = [1.0, 2.0, 3.0]
+    y = jl2py(x)
+    x[1] = 99.0
+    @test pyconvert(Float64, y[0]) == 1.0
+    y = let x = collect(1:10_000)
+        jl2py(x)
+    end
+    GC.gc(true)
+    @test pyconvert(Int, y.sum()) == sum(1:10_000)
+
+    # other vectors -> python lists (element-wise): no numpy dtype (or no Arrow type) exists
+    for x in Any[["a", "b"], Any[1, 2.5], Union{Missing, Int}[1, missing],
+                 Union{Int32, Int64}[1, 2], BigInt[1, 2], [1//2, 3//4], Int128[1],
+                 ComplexF64[1 + 2im], Union{}[]]
+        @test pyisinstance(jl2py(x), pytype(pylist()))
+    end
+
+    # dicts/namedtuples -> python dicts
     @test py2jl(jl2py(Dict("a" => [1, 2], "b" => [3, 4]))) == Dict("a" => [1, 2], "b" => [3, 4])
     @test py2jl(jl2py((label = [1, 2], x = [3, 4]))) == Dict("label" => [1, 2], "x" => [3, 4])
     @test py2jl(jl2py((1, "a", [2, 3]))) == (1, "a", [2, 3])
@@ -55,6 +93,9 @@ end
     # a vector of arrays becomes a python list of numpy arrays
     v = [Int[1, 2], Int[3, 4]]
     @test py2jl(jl2py(v)) == v
+    y = jl2py([UInt16[1, 2], UInt16[3]])
+    @test pyisinstance(y, pytype(pylist()))
+    @test pyconvert(String, y[0].dtype.name) == "uint16"
 end
 
 @testset "jl2numpy / numpy2jl" begin

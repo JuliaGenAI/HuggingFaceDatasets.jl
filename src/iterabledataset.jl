@@ -173,8 +173,9 @@ Base.copy(ds::IterableDataset) = IterableDataset(getfield(ds, :py), getfield(ds,
     with_format(ds::IterableDataset, format)
 
 Return a copy of `ds` with the format set to `format`. As for [`Dataset`](@ref), `"julia"` is
-numpy-backed + [`py2jl`](@ref); `nothing` yields raw Python observations; any other string is
-forwarded to `datasets`' own `with_format`. See also [`set_format!`](@ref).
+the dtype-preserving numpy-based `"julia"` formatter + [`py2jl`](@ref); `nothing` yields raw
+Python observations; any other string is forwarded to `datasets`' own `with_format`. See also
+[`set_format!`](@ref).
 """
 function with_format(ds::IterableDataset, format)
     ds = copy(ds)
@@ -188,13 +189,14 @@ Set the format of `ds` to `format`. Mutating version of [`with_format`](@ref). U
 [`Dataset`](@ref), `datasets.IterableDataset` has no in-place `set_format`, so this replaces the
 wrapped python object with `py.with_format(...)`.
 
-`format == "julia"` installs the julia format (numpy-backed + [`py2jl`](@ref)); `nothing`
-removes all formatting (raw Python observations); any other string is forwarded to `datasets`'
-`with_format` (`"numpy"`, `"torch"`, ...). The single-argument form restores the julia format.
+`format == "julia"` installs the julia format (the dtype-preserving `"julia"` Python
+formatter + [`py2jl`](@ref)); `nothing` removes all formatting (raw Python observations); any
+other string is forwarded to `datasets`' `with_format` (`"numpy"`, `"torch"`, ...). The
+single-argument form restores the julia format.
 """
 function set_format!(ds::IterableDataset, format)
     if format == "julia"
-        ds.py = getfield(ds, :py).with_format("numpy")
+        ds.py = getfield(ds, :py).with_format("julia")
         ds.jltransform = py2jl
     else
         ds.py = getfield(ds, :py).with_format(format)

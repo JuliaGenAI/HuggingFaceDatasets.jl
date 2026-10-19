@@ -38,7 +38,7 @@ end
     # each split keeps its source `Dataset`'s transform: `Dataset((;...))` is julia by
     # default, so observations come back as native Julia values
     @test dd["train"][1] == Dict("label" => 1)
-    @test dd["train"].format["type"] == "numpy"
+    @test dd["train"].format["type"] == "julia"
 
     # per split: a julia source stays julia, a raw source stays raw
     raw = set_format!(Dataset((; label=[5, 0, 4])), nothing)
@@ -51,7 +51,7 @@ end
     built = DatasetDict("t" => train)
     set_format!(built, nothing)
     @test built["t"][1] isa Py
-    @test train.format["type"] == "numpy"        # source untouched
+    @test train.format["type"] == "julia"        # source untouched
 
     # the public constructors take no `jltransform` kwarg (it is derived from the splits)
     @test_throws MethodError DatasetDict("train" => train; jltransform = identity)
@@ -98,13 +98,22 @@ end
     @test pyisinstance(ds[1]["label"], pytype(pyint()))
     @test py2jl(ds[1]["label"]) == 7
     @test py2jl(ds[2]["label"]) == 2
-    @test mnist["test"].format["type"] == "numpy"   # original untouched
+    @test mnist["test"].format["type"] == "julia"   # original untouched
+end
+
+@testset "with_format(d, nothing)" begin
+    d = with_format(mnist, nothing)
+    @test d isa DatasetDict
+    @test d["test"].format["type"] === nothing
+    @test pyisinstance(d["test"][1], pytype(pydict()))
+    @test mnist["test"].format["type"] == "julia"   # original untouched
+    @test mnist["test"][1] isa Dict
 end
 
 @testset "with_format(julia)" begin
     d = with_format(mnist, "julia")
     ds = d["test"]
-    @test ds.format["type"] == "numpy"
+    @test ds.format["type"] == "julia"
     x = ds[1]
     @test x isa Dict
     @test x["label"] isa Int
@@ -132,7 +141,7 @@ end
     d = deepcopy(mnist)
     set_format!(d, nothing)
     @test d["test"].format["type"] === nothing              # the copy is stripped ...
-    @test mnist["test"].format["type"] == "numpy"           # ... original julia intact
+    @test mnist["test"].format["type"] == "julia"           # ... original julia intact
     d.set_format("numpy")
     @test d["test"].format["type"] == "numpy"
     set_format!(d, nothing)
@@ -145,12 +154,12 @@ end
     @test d["test"].format["type"] === nothing
     reset_format!(d)                                        # reset -> default julia
     @test d["test"][1] isa Dict
-    @test d["test"].format["type"] == "numpy"
+    @test d["test"].format["type"] == "julia"
     set_format!(d, nothing)                                 # explicit nothing -> raw
     @test d["test"].format["type"] === nothing
     set_format!(d)                                          # single-arg form -> julia
-    @test d["test"].format["type"] == "numpy"
-    @test mnist["test"].format["type"] == "numpy"           # original untouched
+    @test d["test"].format["type"] == "julia"
+    @test mnist["test"].format["type"] == "julia"           # original untouched
 end
 
 @testset "property-style format methods (python interface)" begin
@@ -159,11 +168,11 @@ end
     d = set_format!(copy(mnist), nothing)
     @test d["test"].format["type"] === nothing
     d.set_format("julia")                                   # would error if forwarded to Python
-    @test d["test"].format["type"] == "numpy"
+    @test d["test"].format["type"] == "julia"
     @test d["test"][1] isa Dict
     set_format!(d, nothing)
     d.reset_format()
-    @test d["test"].format["type"] == "numpy"
+    @test d["test"].format["type"] == "julia"
     @test d.with_format("julia") isa DatasetDict
 end
 
@@ -207,6 +216,16 @@ end
     # batched map keyword is forwarded
     db = dd.map(x -> Dict("label" => x["label"] .* 2); batched=true)
     @test db["train"][1:4]["label"] == [10, 0, 8, 6]
+
+    # batched filter: the `BitVector` mask is handed to Python as a numpy bool array
+    dfb = dd.filter(x -> x["label"] .> 2; batched=true)
+    @test sort(dfb["train"][1:length(dfb["train"])]["label"]) == [3, 4, 5]
+    @test length(dfb["test"]) == 0
+
+    # numeric vectors returned by `f` keep their element type (#80)
+    dv = dd.map(x -> Dict("y" => UInt8.(x["label"])); batched=true)
+    @test all(dv[k].features["y"].dtype == "uint8" for k in keys(dv))
+    @test dv["train"][1:4]["y"] == [5, 0, 4, 3]
 end
 
 @testset "keys/length are cached and stay correct" begin

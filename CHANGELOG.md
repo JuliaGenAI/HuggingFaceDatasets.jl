@@ -15,16 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still copied. A bonus fix: buffer cleanup now routes through PythonCall's GIL-deferred decref
   instead of DLPack's GIL-reentering finalizer, so a numpy buffer freed on a `DataLoader`
   `parallel=true` worker thread can no longer deadlock against a thread compiling under the GIL.
-- Support `datasets` 5: the conda environment now admits `datasets >=4.0, <6`. Note that
-  `datasets` 5.0 makes streaming `IterableDataset.shuffle` sample from several input shards by
-  default; pass `max_buffer_input_shards=1` for the previous behavior.
-- Support Python 3.14 and newer. Instead of excluding all of Python ≥ 3.14, only conda-forge's
-  free-threaded (no-GIL) CPython builds stay excluded, by requiring `python-gil`. PythonCall
-  ≥ 0.9.37 is now required: it is the first release that works with conda-forge's Python 3.15,
-  which no longer bundles `libpython`. On Python ≥ 3.14, code that captures stdout through a
-  pipe (e.g. Documenter doctests) should first call
-  `pyimport("multiprocessing.resource_tracker").ensure_running()`: otherwise the resource
-  tracker that `datasets` spawns inherits the capture pipe, and the capture never finishes.
+- **The `"julia"` format keeps each column's dtype** (#78). It used to read data through
+  `datasets`' `numpy` format, which casts every integer column to `Int64` and every float column
+  to `Float32`. It now uses its own `"julia"` Python formatter, so a `uint16` column comes back
+  as `UInt16` (instead of a 4× larger `Int64`), a `float64` column as `Float64` (instead of
+  silently losing precision as `Float32`), an `int32` column as `Int32`, and so on, for `Dataset`,
+  `DatasetDict`, `IterableDataset`, and `IterableDatasetDict`. The Python format type is now
+  `"julia"` (`ds.format["type"] == "julia"`); the `"numpy"` format is unchanged. Since that format
+  type exists only in Python processes that have loaded this package, `ds.save_to_disk(path)`
+  stores a `"julia"`-formatted dataset with the `"numpy"` format, so plain Python can still
+  `load_from_disk` it.
+- `jl2py` converts a vector of `Bool`, `Int8`–`Int64`, `UInt8`–`UInt64` or `Float16`–`Float64`
+  to a 1-D numpy array of the same dtype (a copy) instead of a Python list of scalars; vectors of
+  other element types still become lists. As a result, the `Dataset(::AbstractDict)`,
+  `Dataset(::NamedTuple)`, Tables.jl and `Dataset.from_dict` constructors now keep the element
+  type of numeric columns: `Dataset((; x = Float32[1, 2]))` has a `float32` column (was
+  `float64`), and `UInt8`/`Int32`/`Float16` columns are no longer widened to `int64`/`float64`.
+  Batched `filter` masks are passed as numpy bool arrays. (#80)
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
@@ -33,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pickle` on the main task and loading this package on the workers — is handled upstream by
   MLUtils, so no wrapper type is exported here. An `@info` notes when an in-memory dataset is
   first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
+
+### Fixed
+- A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
+  token ids per row) now produces a column of the same element type (`uint16`) instead of
+  `int64`/`float64`, which stored up to 4× the data. (#80)
+- `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
+  with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
+  matching `set_format!(ds, nothing)` and the other dataset types.
 
 ## [0.4.1] - 2026-07-06
 
