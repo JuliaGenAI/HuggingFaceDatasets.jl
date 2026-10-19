@@ -89,6 +89,12 @@ end
     @test rows[1]["f"] === 1.0000000001
 end
 
+@testset "julia format reads string columns as Julia strings" begin
+    itds = Dataset((; s = ["a", "b"^1000, "c"])).to_iterable_dataset()
+    @test [r["s"] for r in itds] == ["a", "b"^1000, "c"]
+    @test first(itds)["s"] isa String
+end
+
 @testset "format switching" begin
     ds = Dataset((; x = [1, 2, 3]))
     itds = ds.to_iterable_dataset()
