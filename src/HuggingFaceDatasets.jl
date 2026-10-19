@@ -37,6 +37,10 @@ export IterableDatasetDict
 
 include("column.jl")
 
+include("batches.jl")
+
+include("ragged.jl")
+
 include("transforms.jl")
 export py2jl,
     jl2py,
@@ -46,6 +50,7 @@ export py2jl,
 include("features.jl")
 export Features, ClassLabel
 @compat public Value, features, class_names, int2str, str2int
+@compat public BatchIterator, PyBatch, RaggedVector
 
 # Declare the wrapper types as Python wrappers (PythonCall's "custom wrappers"): passing one to
 # any Python call, as an argument, a keyword (`features = ds.features`) or a container element,

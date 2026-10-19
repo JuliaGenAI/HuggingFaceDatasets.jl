@@ -79,6 +79,8 @@ function _method_override(ds::IterableDataset, s::Symbol)
         return (f; kws...) -> map(f, ds; kws...)
     elseif s === :filter
         return (f; kws...) -> filter(f, ds; kws...)
+    elseif s === :iter
+        return (args...; kws...) -> _batch_iterator(ds, args...; kws...)
     else
         return nothing
     end

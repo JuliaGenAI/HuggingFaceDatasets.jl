@@ -23,8 +23,10 @@ that lazily converts observations to Julia types).
   (argument, keyword, container element) hands Python the wrapped object.
 - `src/python/huggingfacedatasets_jl.py` — the Python `datasets` formatter behind the
   `"julia"` format (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's
-  Arrow dtype and reads top-level string columns straight from Arrow as `object` arrays of
-  `str`, skipping numpy's fixed-width `<U{maxlen}` temporary), registered on import as
+  Arrow dtype, reads top-level string columns straight from Arrow as `object` arrays of
+  `str`, skipping numpy's fixed-width `<U{maxlen}` temporary, and returns a batch of a ragged
+  list column of numbers as a `RaggedArray`, an object array of 1-D arrays that also carries
+  the flat Arrow `values`/`offsets` for `py2jl`), registered on import as
   format type `"julia"`. `__init__` appends `src/python` to `sys.path` and imports it. The
   registered name is a `str` subclass (`JuliaFormatType`) defined in the module, so a pickled
   `"julia"`-formatted dataset references the module and unpickling it registers the
@@ -44,6 +46,13 @@ that lazily converts observations to Julia types).
 - `src/iterabledatasetdict.jl` — `IterableDatasetDict`, a dict of `IterableDataset`s
   (wraps `datasets.IterableDatasetDict`); returned by streaming `load_dataset`
   without a `split`.
+- `src/batches.jl` — `BatchIterator`, returned by `ds.iter(; batch_size)` on a `Dataset` or
+  `IterableDataset` (routed through `_method_override`). In the `"julia"` format it yields
+  `py2jl`'d batches and `pydel!`s each Python batch; in a Python format it yields `PyBatch`es,
+  released (pointed at `None`, never left NULL) with the columns taken from them when the
+  iterator advances.
+- `src/ragged.jl` — `RaggedVector`, the vector of views into one flat buffer that `py2jl`
+  builds from a `RaggedArray`.
 - `src/column.jl` — `Column`, a lazy 1-based `AbstractVector` view over a single
   dataset column (wraps the `datasets.Column` returned by `dataset[name]` on
   datasets ≥ 4), converting elements with `py2jl` on access. `collect` and range
@@ -60,7 +69,9 @@ that lazily converts observations to Julia types).
   PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
   format is numpy-based, so numeric array columns decode to real N-D Julia arrays
   (of the column's own dtype) and image columns decode to raw numeric arrays (not
-  `Colorant` colorviews).
+  `Colorant` colorviews). `numpy2jl` roots each numpy array in `_NUMPY_ROOTS` by identity,
+  owned by the result's `Memory` on Julia ≥ 1.11 (which `reshape`/`vec` share), and runs the
+  GC as the memory it wraps grows, since Julia's GC doesn't count it.
 - `src/features.jl` — `Py`-backed views over a dataset's schema: `Features` (an
   `AbstractDict` returned by `ds.features`), and the `ClassLabel`/`Value` leaves it
   wraps, each forwarding attribute/method access to Python (`cl.names`,

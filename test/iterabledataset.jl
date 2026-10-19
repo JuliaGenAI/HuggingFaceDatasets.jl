@@ -133,6 +133,25 @@ end
     @test first(itds)["s"] isa String
 end
 
+@testset "batch iterator (#105, #107)" begin
+    ds = Dataset((; text = ["a", "bb", "ccc"], x = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]))
+    itds = ds.to_iterable_dataset()
+
+    it = itds.iter(batch_size = 2)
+    @test Base.IteratorSize(it) == Base.SizeUnknown()
+    batches = collect(it)
+    @test batches == [ds[1:2], ds[3:3]]
+    @test batches[1]["text"] isa Vector{String} && batches[1]["x"] isa Matrix{Float64}
+    @test collect(itds.iter(batch_size = 2, drop_last_batch = true)) == batches[1:1]
+    @test [b["text"] for b in itds.take(2).iter(batch_size = 5)] == [["a", "bb"]]
+
+    raw = with_format(itds, nothing)
+    texts = [b["text"] for b in raw.iter(batch_size = 2)]
+    @test all(t -> pyis(t, pybuiltins.None), texts)   # released as the loop advanced
+    @test [pyconvert(Vector{String}, copy(b)["text"]) for b in raw.iter(batch_size = 2)] ==
+          [["a", "bb"], ["ccc"]]
+end
+
 @testset "format switching" begin
     ds = Dataset((; x = [1, 2, 3]))
     itds = ds.to_iterable_dataset()
