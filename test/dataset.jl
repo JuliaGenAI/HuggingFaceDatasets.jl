@@ -54,6 +54,27 @@ end
     @test ds[1:2]["f"] isa Vector{Float64}
     @test ds[1:2]["b"] == [true, false]
 
+    # numeric columns keep their element type in the schema (#80)
+    ds = Dataset((u8 = UInt8[1, 2], i32 = Int32[3, 4], f32 = Float32[1.5, 2.5],
+                  f16 = Float16[1, 2], b = [true, false], r = 1:2))
+    @test [ds.features[k].dtype for k in ds.column_names] ==
+          ["uint8", "int32", "float32", "float16", "bool", "int64"]
+    @test ds[1:2]["u8"] == [1, 2]
+    @test ds[1:2]["i32"] == [3, 4]
+    @test ds[1:2]["f32"] == [1.5, 2.5]
+    @test ds[1:2]["f16"] == [1, 2]
+    @test ds[1:2]["b"] == [true, false]
+    @test ds[2]["r"] == 2
+    @test pyconvert(String, pystr(Dataset((; x = [UInt16[1, 2], UInt16[3]])).py.features["x"])) ==
+          "List(Value('uint16'))"
+    @test Dataset((; x = Int[])).features["x"].dtype == "int64"
+
+    # the column is copied: mutating the source vector afterwards leaves the dataset intact
+    v = Float32[1, 2, 3]
+    ds = Dataset((; v))
+    v[1] = 100
+    @test ds[1:3]["v"] == [1, 2, 3]
+
     # a custom `jltransform` opts out of the default julia format (raw Python format kept)
     ds = Dataset(Dict("label" => [5, 0, 4]); jltransform = py2jl)
     @test ds.format["type"] === nothing
@@ -96,6 +117,11 @@ end
     @test ds[1:3]["label"] == [5, 0, 4]
     @test ds[1:3]["text"] == ["a", "b", "c"]
     @test ds[1:3]["label"] == Dataset((label = [5, 0, 4], text = ["a", "b", "c"]))[1:3]["label"]
+
+    # numeric columns keep their element type (#80)
+    ds = Dataset([(u = 0x01, f = 1.5f0), (u = 0x02, f = 2.5f0)])
+    @test ds.features["u"].dtype == "uint8"
+    @test ds.features["f"].dtype == "float32"
 
     # a custom `jltransform` is forwarded through the table path
     ds = Dataset(rt; jltransform = py2jl)
@@ -522,6 +548,27 @@ end
     ds5 = filter(x -> x["label"] .< 3, dsj; batched=true)
     @test ds5[1] isa Dict{String, Int64}
     @test sort(ds5[1:length(ds5)]["label"]) == [0, 1, 2]
+    ds6 = filter(x -> Vector{Bool}(x["label"] .> 3), dsj; batched=true)
+    @test sort(ds6[1:length(ds6)]["label"]) == [4, 5]
+
+    # numeric vectors returned by `f` keep their element type (#80)
+    dv = map(b -> Dict("y" => [rand(UInt16, 4) for _ in b["label"]]), dsj;
+             batched=true, batch_size=2)
+    @test pyconvert(String, pystr(dv.py.features["y"])) == "List(Value('uint16'))"
+    dv = map(b -> Dict("y" => Int32.(b["label"])), dsj; batched=true)
+    @test dv.features["y"].dtype == "int32"
+    @test dv[1]["y"] == 5                                    # still a scalar per row
+    @test dv[1:6]["y"] == [5, 0, 4, 3, 2, 1]
+    dv = map(x -> Dict("y" => Float32[x["label"], 1]), dsj)    # one vector per row
+    @test pyconvert(String, pystr(dv.py.features["y"])) == "List(Value('float32'))"
+    @test dv[1]["y"] == [5, 1]
+    @test dv[1:2]["y"] == [5 0; 1 1]
+
+    # each returned vector is copied: a buffer reused across calls doesn't alias the rows
+    # that `datasets` holds before writing them
+    buf = zeros(Int, 2)
+    dv = map(x -> (buf .= x["label"]; Dict("y" => buf)), dsj)
+    @test [dv[i]["y"] for i in 1:6] == [fill(l, 2) for l in [5, 0, 4, 3, 2, 1]]
 
     # property-style `ds.map` / `ds.filter` route to the julia-bridged versions above
     # (python interface), i.e. `ds.map(f)` == `map(f, ds)` — the callback still sees Julia

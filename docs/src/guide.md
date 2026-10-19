@@ -357,6 +357,9 @@ A few things to note:
   batch (a `Dict` mapping each column to a vector). Return the same shape: a scalar
   (`map`) / `Bool` (`filter`) per example, or a vector per column / `Vector{Bool}` when
   batched.
+- **Element types are kept.** A numeric vector returned by the callback is stored with its
+  element type, so e.g. `Vector{UInt16}` token ids become a `uint16` column rather than being
+  widened to `int64`.
 - **Keyword arguments** such as `batched`, `num_proc`, and `remove_columns` are forwarded
   to the Python method, so multiprocessing and caching work as usual.
 - **Format is preserved.** The returned `Dataset` inherits the parent's `"julia"` format

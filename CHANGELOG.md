@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type exists only in Python processes that have loaded this package, `ds.save_to_disk(path)`
   stores a `"julia"`-formatted dataset with the `"numpy"` format, so plain Python can still
   `load_from_disk` it.
+- `jl2py` converts a vector of `Bool`, `Int8`–`Int64`, `UInt8`–`UInt64` or `Float16`–`Float64`
+  to a 1-D numpy array of the same dtype (a copy) instead of a Python list of scalars; vectors of
+  other element types still become lists. As a result, the `Dataset(::AbstractDict)`,
+  `Dataset(::NamedTuple)`, Tables.jl and `Dataset.from_dict` constructors now keep the element
+  type of numeric columns: `Dataset((; x = Float32[1, 2]))` has a `float32` column (was
+  `float64`), and `UInt8`/`Int32`/`Float16` columns are no longer widened to `int64`/`float64`.
+  Batched `filter` masks are passed as numpy bool arrays. (#80)
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
@@ -35,6 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
 
 ### Fixed
+- A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
+  token ids per row) now produces a column of the same element type (`uint16`) instead of
+  `int64`/`float64`, which stored up to 4× the data. (#80)
 - `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
   with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
   matching `set_format!(ds, nothing)` and the other dataset types.

@@ -63,6 +63,22 @@ end
 
     f2 = filter(row -> row["x"] == 5, itds)
     @test collect(f2) == [Dict("x" => 5)]
+
+    # batched filter with a `BitVector` mask (handed to Python as a numpy bool array)
+    fb = itds.filter(b -> isodd.(1:length(b["x"])); batched=true)
+    @test [r["x"] for r in fb] == [1, 3, 5]
+
+    # numeric vectors returned by `f` keep their element type (#80) and are copied, so a
+    # yielded row doesn't alias the vector `f` returned
+    v = Float32[1, 2]
+    mv = itds.map(row -> Dict("y" => v))
+    r = first(mv.py.with_format(nothing))
+    @test pyconvert(String, r["y"].dtype.name) == "float32"
+    @test !pyconvert(Bool, np.shares_memory(r["y"], jl2numpy(v)))
+    y = first(mv)["y"]
+    @test y == [1, 2]
+    y[1] = 100
+    @test v == [1, 2]
 end
 
 @testset "julia format keeps each column's dtype" begin
