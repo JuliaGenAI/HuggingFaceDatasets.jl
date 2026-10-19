@@ -40,7 +40,8 @@ that lazily converts observations to Julia types).
   without a `split`.
 - `src/column.jl` — `Column`, a lazy 1-based `AbstractVector` view over a single
   dataset column (wraps the `datasets.Column` returned by `dataset[name]` on
-  datasets ≥ 4), converting elements with `py2jl` on access.
+  datasets ≥ 4), converting elements with `py2jl` on access. `collect` and range
+  slices read one batch; per-element access is a Python call per element.
 - `src/load_dataset.jl` — `load_dataset`, thin wrapper over
   `datasets.load_dataset` returning a `Dataset`/`DatasetDict` (or, with
   `streaming=true`, an `IterableDataset`/`IterableDatasetDict`).

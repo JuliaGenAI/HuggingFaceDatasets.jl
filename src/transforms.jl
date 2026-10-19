@@ -59,11 +59,11 @@ function py2jl(x::Py)
     # handle numpy arrays
     elseif pyisinstance(x, np.ndarray)
         # A 0-d array is a scalar wearing an array's clothes — the numpy formatter tensorizes a
-        # plain scalar cell (e.g. the output of a `map` returning a Julia/Python scalar) to a
-        # 0-d `ndarray`. Unwrap to a native scalar via `.item()`, mirroring the `np.generic`
-        # branch below, so a scalar reads back as a scalar rather than a `fill(x)` 0-d array.
+        # plain scalar cell (e.g. a `bool` cell, or the output of a `map` returning a Julia/Python
+        # scalar) to a 0-d `ndarray`. Unwrap it to a numpy scalar of the same dtype (`x[()]`) and
+        # convert that, so a scalar reads back as a scalar rather than a `fill(x)` 0-d array.
         if pyconvert(Int, x.ndim) == 0
-            return py2jl(x.item())
+            return py2jl(x[()])
         # Zero-copy sharing (`numpy2jl`) only supports numeric dtypes. Non-numeric arrays (strings,
         # `object` arrays from ragged columns, datetimes, ...) fall back to a nested-list
         # conversion, so a string column still comes back as a `Vector{String}`.
@@ -72,8 +72,14 @@ function py2jl(x::Py)
         else
             return py2jl(x.tolist())
         end
-    # handle numpy scalars (`np.int64`, `np.float32`, `np.str_`, `np.bool_`, ...), which
-    # the numpy format yields for single cells; `.item()` gives the native Python scalar.
+    # handle numpy scalars, which the numpy-based formatter yields for single cells. A numeric
+    # one becomes the Julia number of the same type (`np.float32` → `Float32`), where `.item()`
+    # would widen it to `Int64`/`Float64`.
+    elseif pyisinstance(x, np.number)
+        v = pyconvert(Any, x)
+        # aliases without a PythonCall rule (e.g. `np.longlong`) convert to a 0-d `PyArray`
+        return v isa AbstractArray ? v[] : v
+    # other numpy scalars (`np.bool_`, `np.datetime64`, ...): `.item()` gives the Python scalar
     elseif pyisinstance(x, np.generic)
         return py2jl(x.item())
     # handle PIL images (any subclass: PNG/JPEG/BMP/GIF/TIFF/... and transform outputs)

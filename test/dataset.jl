@@ -301,6 +301,10 @@ end
     @test col[[2, 1]] == [2, 7]
     @test collect(col) isa Vector{Int}
     @test length(collect(col)) == 10000
+    # a stacked image batch is split back into one matrix per row
+    imgs = collect(ds["image"])
+    @test imgs isa Vector{Matrix{UInt8}} && length(imgs) == 10000
+    @test imgs[2] == ds[2]["image"]
 
     # under the numpy format an Image feature decodes to a real array (no PIL round-trip),
     # so a single row is an `(H, W)` matrix and a range stacks into an `(H, W, N)` tensor
@@ -378,6 +382,15 @@ end
     @test r["f64"] === 1.0000000001
     @test r["a2"] == a2[1]
     @test ds["f64"][1:2] isa Vector{Float64}   # lazy `Column` batches too
+    # ... and so do a `Column`'s elements and `collect`, which reads the column in one batch
+    @test ds["i32"] isa HuggingFaceDatasets.Column{Int32}
+    @test ds["i32"][2] === Int32(2)
+    @test ds["f16"][1] === Float16(1.5)
+    @test collect(ds["u64"]) isa Vector{UInt64}
+    @test collect(ds["u16"]) isa Vector{Vector{UInt16}} && collect(ds["u16"]) == [[1, 2], [3, 4]]
+    @test collect(ds["a2"]) isa Vector{Matrix{Float64}} && collect(ds["a2"]) == a2
+    @test collect(ds["rag"]) == [[1, 2, 3], [4]]
+    @test collect(Dataset((; y = Float32[]))["y"]) == []
 
     # a Float64 array column built from Julia round-trips exactly
     x = rand(2, 3, 4)
@@ -388,6 +401,7 @@ end
     r = first(it)
     @test r["u16"] isa Vector{UInt16}
     @test r["f64"] === 1.0000000001
+    @test r["i32"] === Int32(1) && r["f16"] === Float16(1.5) && r["b"] === true
     b = py2jl(first(it.py.iter(batch_size = 2)))
     @test b["u16"] isa Matrix{UInt16}
     @test b["f64"] isa Vector{Float64}

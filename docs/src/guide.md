@@ -251,6 +251,9 @@ Python: {'label': 5}
 Indexing by column name returns a lazy [`Column`](@ref): it behaves like a vector
 (indexing, slicing, iteration, broadcasting) but converts elements only on access, so
 the whole column is never materialized at once. Call `collect` to get a plain `Vector`.
+`collect` and slices (`col[a:b]`) read their rows in one batch, while element-wise access
+(`col[i]`, `for x in col`, `sum(col)`) makes a Python call per element, so for more than a
+few elements, slice or `collect` first.
 
 The special `"julia"` format reads data through a `"julia"` formatter that this package
 registers with `datasets` (so `ds.format["type"] == "julia"`), and sets the Julia transform
