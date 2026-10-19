@@ -255,6 +255,8 @@ julia> int2str(ds, "label", [0, 1, 1])
 ```
 """
 int2str(ds::Dataset, col, i) = py2jl(_classlabel(ds, col).py.int2str(jl2py(i)))
+# `ClassLabel.int2str` rejects numpy integer scalars, which `jl2py` makes of narrow integers.
+int2str(ds::Dataset, col, i::Integer) = py2jl(_classlabel(ds, col).py.int2str(Py(i)))
 
 """
     str2int(ds::Dataset, col, s)

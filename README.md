@@ -60,3 +60,4 @@ Pass `set_format!(train_data, nothing)` (or use the underlying `.py` object) to 
 ## Troubleshooting
 
 - If having problems in resolving the CondaPkg environment, try to set `ENV["JULIA_CONDAPKG_OPENSSL_VERSION"] = true` before loading the package. See more details [here](https://github.com/JuliaPy/CondaPkg.jl?tab=readme-ov-file#preferences)
+- On Windows with Julia 1.10 or 1.11, loading the package fails with `ImportError: DLL load failed while importing lib: The specified procedure could not be found.` The conda-forge `libcurl` used by `pyarrow` needs a newer `libssh2` than the one bundled with (and already loaded by) Julia. Use Julia ≥ 1.12, or cap the conda `libssh2` in your project with `using CondaPkg; CondaPkg.add("libssh2"; version="<1.11.1")` and restart Julia (this resolves older `pyarrow` and `datasets` releases). See [#29](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/issues/29).

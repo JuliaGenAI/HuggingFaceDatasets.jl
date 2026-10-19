@@ -50,9 +50,30 @@
 end
 
 @testset "jl2py" begin
-    # scalars fall back to PythonCall's default conversion
+    # other scalars fall back to PythonCall's default conversion: Bool, Int64 and Float64
+    # become Python scalars
     @test pyconvert(Int, jl2py(3)) == 3
     @test pyconvert(String, jl2py("a")) == "a"
+    @test pyisinstance(jl2py(true), pybuiltins.bool)
+    @test pyisinstance(jl2py(3), pybuiltins.int)
+    @test pyisinstance(jl2py(2.5), pybuiltins.float)
+
+    # narrow numeric scalars -> numpy scalars keeping their dtype (#93)
+    for x in (Int8(-7), Int16(-7), Int32(-7), UInt8(7), UInt16(7), UInt32(7), typemax(UInt64),
+              Float16(1.5), Float32(1.5))
+        y = jl2py(x)
+        @test pyisinstance(y, np.generic)
+        @test pyconvert(String, y.dtype.name) == lowercase(string(typeof(x)))
+        @test pyconvert(typeof(x), y) === x
+    end
+
+    # ... also nested in containers
+    y = jl2py((Int8(1), Dict("a" => Float32(2)), Any[UInt16(3), "b"]))
+    @test pyconvert(String, y[0].dtype.name) == "int8"
+    @test pyconvert(String, y[1]["a"].dtype.name) == "float32"
+    @test pyconvert(String, y[2][0].dtype.name) == "uint16"
+    # ... and as dict keys, which hash like the equal Python int
+    @test pyconvert(String, jl2py(Dict(Int32(1) => "a"))[1]) == "a"
 
     # a Py passes through unchanged
     p = pylist([1, 2])

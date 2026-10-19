@@ -617,6 +617,16 @@ end
     @test dv[1]["y"] == [5, 1]
     @test dv[1:2]["y"] == [5 0; 1 1]
 
+    # ... and so do narrow numeric scalars (#93)
+    dv = map(x -> Dict("f" => Float32(x["label"]) / 2, "u" => UInt16(x["label"]),
+                       "i" => Int8(-x["label"]), "b" => isodd(x["label"])), dsj)
+    @test [dv.features[k].dtype for k in ("f", "u", "i", "b")] ==
+          ["float32", "uint16", "int8", "bool"]
+    @test dv[1:6]["f"] isa Vector{Float32} && dv[1:6]["f"] == [5, 0, 4, 3, 2, 1] ./ 2
+    @test dv[1:6]["u"] isa Vector{UInt16} && dv[1:6]["u"] == [5, 0, 4, 3, 2, 1]
+    @test dv[1:6]["i"] isa Vector{Int8} && dv[1:6]["i"] == -[5, 0, 4, 3, 2, 1]
+    @test dv[1]["u"] === UInt16(5)
+
     # each returned vector is copied: a buffer reused across calls doesn't alias the rows
     # that `datasets` holds before writing them
     buf = zeros(Int, 2)
@@ -659,4 +669,24 @@ end
     @test y[:]["label"] == [105, 100, 104, 103, 102, 101]
     pypred = @pyeval("lambda b: [l > 2 for l in b['label']]")
     @test length(ds.py.filter(pypred; batched=true, num_proc=2)) == 3
+end
+
+@testset "python map / filter with num_proc in spawned workers" begin
+    # `datasets`' `num_proc` workers are spawned as fresh interpreters on Windows, but forked
+    # on Linux and macOS. Force spawn so that every platform checks that a worker, which never
+    # loaded this package, reads its shard of a "julia"-formatted dataset in the "julia" format.
+    mp = pyimport("multiprocess")
+    method = mp.get_start_method()
+    mp.set_start_method("spawn"; force=true)
+    try
+        ds = Dataset((; label=UInt16[5, 0, 4, 3, 2, 1]))
+        pyfn = @pyeval("lambda b: {'label': b['label'] + 100, 'dtype': [str(b['label'].dtype)] * len(b['label'])}")
+        y = with_format(Dataset(ds.py.map(pyfn; batched=true, num_proc=2)), "julia")
+        @test y[:]["label"] == UInt16[105, 100, 104, 103, 102, 101]
+        @test all(==("uint16"), y[:]["dtype"])   # not the "numpy" format's int64
+        pypred = @pyeval("lambda b: b['label'] > 2")
+        @test length(ds.py.filter(pypred; batched=true, num_proc=2)) == 3
+    finally
+        mp.set_start_method(method; force=true)
+    end
 end

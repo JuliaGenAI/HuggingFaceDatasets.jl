@@ -195,6 +195,11 @@ Convert Julia values to Python, the inverse of [`py2jl`](@ref). Recursively trav
 `AbstractDict`, `NamedTuple`, `Tuple`, and `AbstractVector` containers, converting the
 leaves.
 
+A narrow numeric scalar (`Int8`–`Int32`, `UInt8`–`UInt64`, `Float16`, `Float32`) becomes a
+numpy scalar of the same dtype, so `datasets` stores it with its type (a `Float32` becomes
+`float32`, not `float64`). `Bool`, `Int64` and `Float64` become Python `bool`, `int` and
+`float`.
+
 A vector of numpy-native numbers (`Bool`, `Int8`–`Int64`, `UInt8`–`UInt64`,
 `Float16`–`Float64`) becomes a 1-D numpy array of the same dtype, so `datasets` stores it
 with its element type (a `Vector{UInt16}` becomes `uint16`, not `int64`). The vector is
@@ -216,12 +221,22 @@ Python: {'label': array([1, 2, 3])}
 julia> jl2py(UInt16[1, 2, 3])
 Python: array([1, 2, 3], dtype=uint16)
 
+julia> jl2py(Float32(1.5))
+Python: np.float32(1.5)
+
 julia> jl2py((1, "a", ["b", "c"]))
 Python: (1, 'a', ['b', 'c'])
 ```
 """
 jl2py(x) = Py(x)
 jl2py(x::Py) = x
+
+# Numpy scalars, since `datasets` stores a Python `int`/`float` as int64/float64. `Bool`, `Int64`
+# and `Float64` already have those dtypes, so they stay Python scalars, which some APIs require
+# (`json`, `ClassLabel.int2str`, ...).
+for T in (Int8, Int16, Int32, UInt8, UInt16, UInt32, UInt64, Float16, Float32)
+    @eval jl2py(x::$T) = np.$(Symbol(lowercase(string(T))))(x)
+end
 
 jl2py(x::Dataset)             = getfield(x, :py)
 jl2py(x::DatasetDict)         = getfield(x, :py)

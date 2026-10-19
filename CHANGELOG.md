@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
   token ids per row) now produces a column of the same element type (`uint16`) instead of
   `int64`/`float64`, which stored up to 4× the data. (#80)
+- The same holds for narrow numeric scalars: a Julia function passed to `map` that returns
+  `Int8`–`Int32`, `UInt8`–`UInt64`, `Float16` or `Float32` values now produces a column of that
+  type (e.g. `float32`, `uint16`) instead of `float64`/`int64`. `jl2py` converts such scalars to
+  numpy scalars of the same dtype, also inside tuples, dicts and vectors of non-numeric element
+  type (e.g. a `Vector{Any}` column passed to `Dataset`); `Bool`, `Int64` and `Float64` still
+  become Python scalars. (#93)
 - `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
   with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
   matching `set_format!(ds, nothing)` and the other dataset types.
@@ -74,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Float32` rows it takes 24 ms instead of 6.2 s, and on MNIST's 10 000 test images 0.28 s
   instead of 0.66 s. Slicing a `Column` with a range (`col[a:b]`) reads one contiguous slice
   instead of gathering a list of indices (490 ms → 25 ms on the 200 000 rows).
+- On Windows with Julia 1.10 or 1.11, where loading the package fails with `ImportError: DLL load
+  failed while importing lib` (#29), an error message now explains the cause and the workaround:
+  conda-forge's `libcurl`, used by `pyarrow`, needs a newer `libssh2` than the one Julia has
+  already loaded. Use Julia ≥ 1.12, or run `CondaPkg.add("libssh2"; version="<1.11.1")` in your
+  project and restart Julia.
 
 ## [0.4.1] - 2026-07-06
 

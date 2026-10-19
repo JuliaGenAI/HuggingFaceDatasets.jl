@@ -460,8 +460,8 @@ single-argument form `set_format!(ds)` restores the default julia format (see
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        # The "julia" formatter (`julia_formatter.py`) is numpy-based, so numeric array columns
-        # decode as real N-D arrays and a range index stacks rows into an `(N, dims…)` tensor;
+        # The "julia" formatter (`python/huggingfacedatasets_jl.py`) is numpy-based, so numeric
+        # array columns decode as real N-D arrays and a range index stacks rows into an `(N, dims…)` tensor;
         # `py2jl` (zero-copy) then reverses the axes to a Julia `(dims…, N)` array with the
         # observation axis last.
         ds.py.set_format("julia")

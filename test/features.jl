@@ -57,6 +57,8 @@ end
     # 0-based class ids pass through with NO offset (labels are data, not Julia indices)
     @test int2str(ds, "label", 0) == "cat"
     @test int2str(ds, "label", 1) == "dog"
+    @test int2str(ds, "label", Int32(1)) == "dog"   # narrow ints too, not just Int64
+    @test int2str(ds, "label", UInt8(0)) == "cat"
     @test str2int(ds, "label", "dog") == 1
 
     # vector arguments decode/encode a whole batch in one call

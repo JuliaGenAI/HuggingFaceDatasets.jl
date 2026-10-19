@@ -79,6 +79,13 @@ end
     @test y == [1, 2]
     y[1] = 100
     @test v == [1, 2]
+
+    # ... and so do narrow numeric scalars (#93)
+    ms = itds.map(row -> Dict("u" => UInt16(row["x"]), "f" => Float32(row["x"])))
+    r = first(ms.py.with_format(nothing))
+    @test pyconvert(String, r["u"].dtype.name) == "uint16"
+    @test pyconvert(String, r["f"].dtype.name) == "float32"
+    @test [r["u"] for r in ms] == 1:5
 end
 
 @testset "julia format keeps each column's dtype" begin

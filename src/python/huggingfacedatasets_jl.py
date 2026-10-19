@@ -1,6 +1,7 @@
-# The `datasets` formatter behind HuggingFaceDatasets.jl's "julia" format. The Julia package
-# runs this file in its `__init__`, so the "julia" format type exists only in Python processes
-# that have loaded the package.
+# The `datasets` formatter behind HuggingFaceDatasets.jl's "julia" format, registered on import.
+# The Julia package appends this directory to `sys.path` and imports the module in its
+# `__init__`. Other Python processes import it when they unpickle a "julia"-formatted dataset
+# (see `JuliaFormatType`); they never need Julia.
 
 import pyarrow as pa
 from datasets import Value
@@ -57,4 +58,17 @@ class JuliaFormatter(NumpyFormatter):
         return self._format_split(pa_table, super().format_batch, _strings)
 
 
-_register_formatter(JuliaFormatter, "julia")
+class JuliaFormatType(str):
+    """The "julia" format type name, a `str` subclass so that it pickles as a reference to this
+    module.
+
+    `set_format`/`with_format` store the registered name, so a "julia"-formatted dataset pickles
+    with that reference, and unpickling it imports this module, registering the formatter. That
+    is what lets `datasets`' `num_proc` workers read their shard in the "julia" format when they
+    start as fresh interpreters (the default on Windows), since `sys.path` is passed on to them.
+    """
+
+    __slots__ = ()
+
+
+_register_formatter(JuliaFormatter, JuliaFormatType("julia"))
