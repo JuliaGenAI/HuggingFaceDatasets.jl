@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MLUtils, so no wrapper type is exported here. An `@info` notes when an in-memory dataset is
   first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
 
+### Fixed
+- `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
+  with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
+  matching `set_format!(ds, nothing)` and the other dataset types.
+
 ## [0.4.1] - 2026-07-06
 
 ### Added
