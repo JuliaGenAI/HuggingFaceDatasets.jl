@@ -22,8 +22,8 @@ def _first_string(column):
 
 class RaggedArray(np.ndarray):
     """The rows of a list column of numbers, as `NumpyFormatter` returns them (an object array
-    of 1-D arrays), that also holds them as one flat `values` array and Arrow-style `offsets`
-    (row `i` is `values[offsets[i]:offsets[i + 1]]`), which HuggingFaceDatasets.jl reads instead.
+    of 1-D arrays), that also holds them as one flat `values` array and int64 `offsets` (row `i`
+    is `values[offsets[i]:offsets[i + 1]]`), which HuggingFaceDatasets.jl reads instead.
 
     Arrays derived from it (slices, copies, unpickled ones) have `values = offsets = None`.
     """
@@ -46,16 +46,17 @@ def _is_numeric_list(column):
 
 def _numeric_lists(column):
     # What `NumpyFormatter` returns, built from Arrow's flat buffers: a 2-D array if all rows
-    # have the same length, a `RaggedArray` otherwise.
-    array = column.combine_chunks()
-    offsets = array.offsets.to_numpy()
-    values = array.flatten().to_numpy()
-    lengths = np.diff(offsets)
+    # have the same length, a `RaggedArray` otherwise. Chunk by chunk, since combining them would
+    # overflow the int32 offsets of a `list` column past 2^31 values. `values` is a new, writable
+    # array, which Julia shares.
+    values = np.concatenate([chunk.flatten().to_numpy() for chunk in column.chunks])
+    lengths = np.concatenate([np.diff(chunk.offsets.to_numpy()) for chunk in column.chunks])
     if (lengths == lengths[0]).all():
         return values.reshape(len(lengths), lengths[0])
-    rows = array.to_numpy(zero_copy_only=False).view(RaggedArray)
+    rows = np.concatenate([chunk.to_numpy(zero_copy_only=False) for chunk in column.chunks])
+    rows = rows.view(RaggedArray)
     rows.values = values
-    rows.offsets = offsets - offsets[0]
+    rows.offsets = np.concatenate([[0], np.cumsum(lengths, dtype=np.int64)])
     return rows
 
 
@@ -94,6 +95,7 @@ class JuliaFormatter(NumpyFormatter):
                     extractors[field.name] = _strings if batch else _first_string
             elif (
                 batch
+                and self.np_array_kwargs.get("dtype") is None
                 and (feature is None or not require_decoding(feature))
                 and _is_numeric_list(pa_table.column(field.name))
             ):

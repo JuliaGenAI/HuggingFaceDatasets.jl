@@ -115,8 +115,8 @@ end
 #
 # The GC doesn't count the wrapped memory, so a loop whose only allocations are such arrays would
 # keep every one alive (#107). Once the rooted bytes reach twice what was live after the last
-# purge (and at least `_NUMPY_GC_BYTES`), `numpy2jl` runs a young collection, and a full one if
-# that doesn't free half of them.
+# collection that `numpy2jl` ran (and at least `_NUMPY_GC_BYTES`), it runs a young collection,
+# and a full one if that doesn't free half of them.
 mutable struct NumpyRoots
     const lock::ReentrantLock
     const owners::Vector{WeakRef}
@@ -136,10 +136,11 @@ _buffer_owner(a::Array) = @static VERSION >= v"1.11" ? a.ref.mem : a
 _mark_dirty(_) = (@atomic _NUMPY_ROOTS.dirty = true; nothing)
 
 # Drops the entries whose owner was collected, returning their numpy arrays for the caller to
-# release outside the lock. Call with `r.lock` held.
-function _purge!(r::NumpyRoots)
+# release outside the lock. Call with `r.lock` held. `force` scans even if no owner's finalizer
+# ran, as when the caller of a collection holds a lock, which disables finalizers.
+function _purge!(r::NumpyRoots; force::Bool = false)
     dead = Py[]
-    (@atomic r.dirty) || return dead
+    force || (@atomic r.dirty) || return dead
     @atomic r.dirty = false
     j = 0
     for i in eachindex(r.owners)
@@ -152,12 +153,14 @@ function _purge!(r::NumpyRoots)
         end
     end
     resize!(r.owners, j); resize!(r.arrays, j); resize!(r.sizes, j)
-    r.gc_bytes = max(_NUMPY_GC_BYTES, 2 * r.bytes)
+    # Only lowered here: after a young collection, `bytes` can include arrays that survived an
+    # earlier one and are dead, which only a full collection frees.
+    r.gc_bytes = min(r.gc_bytes, max(_NUMPY_GC_BYTES, 2 * r.bytes))
     return dead
 end
 
 function _purge_and_release!(r::NumpyRoots)
-    foreach(PythonCall.pydel!, @lock r.lock _purge!(r))
+    foreach(PythonCall.pydel!, @lock r.lock _purge!(r; force = true))
 end
 
 function _root!(owner, x::Py, nbytes::Int)

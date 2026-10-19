@@ -85,10 +85,11 @@ Base.getindex(c::Column, name::AbstractString) = Column(pyobj(c)[name])
 
 # Read the whole column as one batch: iterating the python column would format and convert
 # it row by row. A fixed-size array column comes back stacked along its last axis, so split
-# it into one array per row.
+# it into one array per row, as for the rows of a `RaggedVector`.
 function Base.collect(c::Column{T}) where {T}
     isempty(c) && return T[]
     x = c[1:length(c)]
+    x isa RaggedVector && return map(collect, x)
     x isa AbstractVector && return x
     x isa AbstractArray && return [copy(selectdim(x, ndims(x), j)) for j in axes(x, ndims(x))]
     return py2jl(pylist(pyobj(c)))   # a batch `py2jl` can't convert, e.g. from a torch format

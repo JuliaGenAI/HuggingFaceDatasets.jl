@@ -502,7 +502,7 @@ julia> ids == [[1, 2, 3], [4]]
 true
 
 julia> ids.values, ids.offsets          # all the values, and where each row starts
-(UInt16[0x0001, 0x0002, 0x0003, 0x0004], Int32[0, 3, 4])
+(UInt16[0x0001, 0x0002, 0x0003, 0x0004], [0, 3, 4])
 ```
 
 To recover the Python orientation of a single array, reverse the axes with `permutedims`:

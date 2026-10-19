@@ -52,14 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   soon as it is converted. In a Python format (`nothing`, `"numpy"`, ...) it yields `PyBatch`es,
   which are released along with the columns taken from them when the iterator advances, so a loop
   over a stream holds one batch of Python memory at a time instead of every batch until Julia's GC
-  runs (#107); `copy` or `py2jl` a batch to keep it.
+  runs (#107); `copy` or `py2jl` a batch to keep it, or pass `release = false`.
 - A batch of a list column of numbers whose rows have different lengths (e.g. token ids) is read
   in the `"julia"` format as a `RaggedVector`, a vector of views into one flat buffer of the
-  batch's values (`r.values`, with Arrow-style 0-based `r.offsets`), instead of a
-  `Vector{Vector{T}}` built from one numpy array per row (#108). Reading 10 000 rows of ~1000
-  `uint16` ids takes 7 ms instead of 0.2 s. Rows of equal length are still stacked into a
-  matrix, and columns with nulls are read as before. Python functions given to `ds.py.map` still
-  see an `object` array of 1-D arrays.
+  batch's values (`r.values`, with 0-based `r.offsets`), instead of a `Vector{Vector{T}}` built
+  from one numpy array per row (#108). Reading 10 000 rows of ~1000 `uint16` ids takes 3 ms
+  instead of 0.2 s. Rows of equal length are still stacked into a matrix, columns with nulls are
+  read as before, and `collect` on the column's `Column` still returns a `Vector{Vector{T}}`.
+  Python functions given to `ds.py.map` still see an `object` array of 1-D arrays.
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel

@@ -213,6 +213,25 @@ end
         peak = max(peak, roots.bytes)
     end
     @test peak ≤ 2 * HuggingFaceDatasets._NUMPY_GC_BYTES
+
+    # ... also when each array survives a young collection, which only a full one then frees
+    peak = 0
+    for _ in 1:30
+        a = numpy2jl(np.ones(10^7, dtype = "float32"))
+        GC.gc(false)
+        numpy2jl(np.ones(1))
+        a = nothing
+        peak = max(peak, roots.bytes)
+    end
+    @test peak ≤ 2 * HuggingFaceDatasets._NUMPY_GC_BYTES
+
+    # ... and when the caller holds a lock, which disables finalizers
+    peak = 0
+    @lock ReentrantLock() for _ in 1:30
+        numpy2jl(np.ones(10^7, dtype = "float32"))
+        peak = max(peak, roots.bytes)
+    end
+    @test peak ≤ 2 * HuggingFaceDatasets._NUMPY_GC_BYTES
 end
 
 # only if no CI
