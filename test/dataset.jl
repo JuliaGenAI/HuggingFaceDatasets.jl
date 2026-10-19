@@ -372,6 +372,45 @@ end
     @test pyconvert(String, n["f64"].dtype.name) == "float32"
 end
 
+@testset "julia format reads strings without a fixed-width numpy array" begin
+    # `datasets`' numpy extractor builds a `<U{maxlen}` array (4 bytes per character of the
+    # longest string, per row); the "julia" formatter extracts `str` objects instead (#79).
+    V = datasets.Value
+    feats = datasets.Features(pydict(Dict("s" => V("string"), "l" => V("large_string"),
+        "n" => V("int32"), "ls" => datasets.List(V("string")))))
+    long = "b"^100_000
+    ds = Dataset.from_dict(Dict("s" => ["a", long, nothing], "l" => ["x", "y", "z"],
+        "n" => [1, 2, 3], "ls" => [["p", "q"], ["r"], String[]]); features = feats)
+
+    @test pyconvert(String, ds.py[pyslice(0, 2)]["s"].dtype.kind) == "O"
+    @test pyconvert(String, ds.py[pyslice(0, 3)]["l"].dtype.kind) == "O"
+    @test pyconvert(String, with_format(ds, "numpy").py[pyslice(0, 2)]["s"].dtype.str) == "<U100000"
+
+    b = ds[1:2]
+    @test b["s"] isa Vector{String} && b["s"] == ["a", long]
+    @test b["n"] isa Vector{Int32} && b["n"] == [1, 2]
+    @test b["ls"] == [["p", "q"], ["r"]]
+    @test ds[1:3]["s"] isa Vector{Union{Nothing, String}} && ds[1:3]["s"][3] === nothing
+    @test ds[1:3]["l"] == ["x", "y", "z"]
+    @test ds[2]["s"] == long
+    @test ds[3]["s"] === nothing
+    @test ds[1] == Dict("s" => "a", "l" => "x", "n" => 1, "ls" => ["p", "q"])
+    @test ds["s"][1:2] == ["a", long]                 # lazy `Column`
+    @test collect(ds["l"]) == ["x", "y", "z"]
+
+    # a dataset with string columns only, and the column order of a batch
+    only = Dataset((; t = ["u", "v", "w"]))
+    @test only[1:3] == Dict("t" => ["u", "v", "w"])
+    @test only[2] == Dict("t" => "v")
+    mixed = Dataset((; a = ["x"], n = [1], z = ["y"]))
+    @test pyconvert(Vector{String}, pylist(mixed.py[pyslice(0, 1)].keys())) == ["a", "n", "z"]
+
+    # streaming reads go through the same formatter
+    it = ds.to_iterable_dataset()
+    @test [r["s"] for r in it] == ["a", long, nothing]
+    @test pyconvert(String, first(it.py.iter(batch_size = 2))["s"].dtype.kind) == "O"
+end
+
 @testset "python transforms" begin
     @pyexec ```
     def pytr(x):

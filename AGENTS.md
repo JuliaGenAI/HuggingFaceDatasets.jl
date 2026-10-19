@@ -18,10 +18,12 @@ that lazily converts observations to Julia types).
   `__init__` via `PythonCall.pycopy!`. Python modules must be imported there,
   not at module top level (PythonCall restriction — see the comment in the file).
 - `src/julia_formatter.py` — the Python `datasets` formatter behind the `"julia"` format
-  (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's Arrow dtype),
-  registered as format type `"julia"`. Its source is read at precompile time and run in
-  `__init__`, so the format type exists only in processes that have loaded the package;
-  `save_to_disk` (src/serialization.jl) therefore saves `"julia"` as `"numpy"`.
+  (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's Arrow dtype and
+  reads top-level string columns straight from Arrow as `object` arrays of `str`, skipping
+  numpy's fixed-width `<U{maxlen}` temporary), registered as format type `"julia"`. Its
+  source is read at precompile time and run in `__init__`, so the format type exists only
+  in processes that have loaded the package; `save_to_disk` (src/serialization.jl)
+  therefore saves `"julia"` as `"numpy"`.
 - `src/dataset.jl` — `Dataset`, the wrapper over `datasets.Dataset`. 1-based
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).

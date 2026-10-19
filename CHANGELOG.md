@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `with_format(ds, nothing)` (and `ds.with_format(nothing)`) on a `Dataset` now returns a copy
   with all formatting removed (raw Python observations) instead of throwing a `MethodError`,
   matching `set_format!(ds, nothing)` and the other dataset types.
+- String columns under the `"julia"` format no longer go through a fixed-width numpy unicode
+  array (`<U{maxlen}`: 4 bytes per character of the batch's longest string, for every row) (#79).
+  They are read from Arrow as Python strings (the Python-side `"julia"` format now returns them as
+  `object` arrays of `str`) and still come back as `Vector{String}`, and `py2jl` converts Python
+  strings directly. On a batch of 1000 documents of 1k–100k characters, `ds[1:1000]` now
+  allocates ~47 MiB of Python temporaries instead of ~430 MiB and runs about 3× faster; batches
+  of short strings are several times faster too.
 
 ## [0.4.1] - 2026-07-06
 
