@@ -66,10 +66,15 @@ that lazily converts observations to Julia types).
 Managed by [CondaPkg.jl](https://github.com/JuliaPy/CondaPkg.jl) via
 `CondaPkg.toml` (conda-forge channel): `datasets`, `numpy`, `pillow`.
 
-- `datasets` is pinned to `>=4.0, <5`. Do **not** lower the floor below 4.0
+- `datasets` is pinned to `>=4.0, <6`. Do **not** lower the floor below 4.0
   (the lazy `Column` column-access path depends on datasets ≥ 4).
-- `python` is pinned to `<3.14` to avoid conda-forge's free-threaded (no-GIL)
-  CPython, which deadlocks PythonCall while importing `datasets`' C extensions.
+- `python-gil` keeps the env on a GIL-enabled CPython, excluding conda-forge's
+  free-threaded (no-GIL) builds (e.g. `cp314t`): PythonCall's free-threading support
+  is experimental, and `datasets`' C extensions re-enable the GIL there anyway.
+- Python ≥ 3.14 defaults to the `forkserver` start method, so `datasets` lazily
+  spawns multiprocessing's resource tracker. Spawned while stdout is captured (as in a
+  Documenter doctest) it inherits the capture pipe and the capture never finishes, so
+  `docs/make.jl` starts the tracker before `makedocs`.
 
 ## Running tests
 

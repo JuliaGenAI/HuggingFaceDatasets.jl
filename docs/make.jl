@@ -1,5 +1,11 @@
 using HuggingFaceDatasets
 using Documenter
+using PythonCall: pyimport
+
+# Python ≥ 3.14 defaults to the `forkserver` start method, so `datasets` lazily spawns
+# multiprocessing's resource tracker. Spawned inside a doctest, it inherits the pipe Documenter
+# captures output through and keeps it open, hanging `makedocs`. Start it here instead.
+Sys.iswindows() || pyimport("multiprocessing.resource_tracker").ensure_running()
 
 # Bring the public-but-unexported schema conveniences into doctest scope, and disable
 # `datasets`' tqdm progress bars so doctests that trigger them (e.g. `class_encode_column`)

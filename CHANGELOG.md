@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still copied. A bonus fix: buffer cleanup now routes through PythonCall's GIL-deferred decref
   instead of DLPack's GIL-reentering finalizer, so a numpy buffer freed on a `DataLoader`
   `parallel=true` worker thread can no longer deadlock against a thread compiling under the GIL.
+- Support `datasets` 5: the conda environment now admits `datasets >=4.0, <6`. Note that
+  `datasets` 5.0 makes streaming `IterableDataset.shuffle` sample from several input shards by
+  default; pass `max_buffer_input_shards=1` for the previous behavior.
+- Support Python 3.14 and newer. Instead of excluding all of Python ≥ 3.14, only conda-forge's
+  free-threaded (no-GIL) CPython builds stay excluded, by requiring `python-gil`. PythonCall
+  ≥ 0.9.37 is now required: it is the first release that works with conda-forge's Python 3.15,
+  which no longer bundles `libpython`. On Python ≥ 3.14, code that captures stdout through a
+  pipe (e.g. Documenter doctests) should first call
+  `pyimport("multiprocessing.resource_tracker").ensure_running()`: otherwise the resource
+  tracker that `datasets` spawns inherits the capture pipe, and the capture never finishes.
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
