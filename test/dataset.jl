@@ -603,6 +603,16 @@ end
     @test dv[1]["y"] == [5, 1]
     @test dv[1:2]["y"] == [5 0; 1 1]
 
+    # ... and so do narrow numeric scalars (#93)
+    dv = map(x -> Dict("f" => Float32(x["label"]) / 2, "u" => UInt16(x["label"]),
+                       "i" => Int8(-x["label"]), "b" => isodd(x["label"])), dsj)
+    @test [dv.features[k].dtype for k in ("f", "u", "i", "b")] ==
+          ["float32", "uint16", "int8", "bool"]
+    @test dv[1:6]["f"] isa Vector{Float32} && dv[1:6]["f"] == [5, 0, 4, 3, 2, 1] ./ 2
+    @test dv[1:6]["u"] isa Vector{UInt16} && dv[1:6]["u"] == [5, 0, 4, 3, 2, 1]
+    @test dv[1:6]["i"] isa Vector{Int8} && dv[1:6]["i"] == -[5, 0, 4, 3, 2, 1]
+    @test dv[1]["u"] === UInt16(5)
+
     # each returned vector is copied: a buffer reused across calls doesn't alias the rows
     # that `datasets` holds before writing them
     buf = zeros(Int, 2)

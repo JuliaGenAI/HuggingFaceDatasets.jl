@@ -58,10 +58,33 @@ include("serialization.jl")
 # `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
 @compat public from_csv, from_json, from_parquet
 
+# Julia < 1.12 bundles libssh2 1.11.0 and loads it before Python starts (at startup on 1.10, with
+# `Pkg` on 1.11). On Windows, the conda-forge `libcurl.dll` that `pyarrow` links then binds to that
+# already-loaded `libssh2.dll` and misses a symbol from the newer libssh2 it was built against (#29).
+function _libssh2_conflict_hint(err)
+    Sys.iswindows() && VERSION < v"1.12" && err isa PyException &&
+        occursin("DLL load failed", sprint(showerror, err)) || return
+    @error """
+    Importing the Python `datasets` package failed because a DLL could not be loaded. On Windows \
+    with Julia < 1.12 this is a known conflict: the conda-forge `libcurl` used by `pyarrow` needs \
+    a newer `libssh2` than the one bundled with Julia, which is already loaded. Either use \
+    Julia ≥ 1.12, or cap the conda `libssh2` at Julia's version and restart Julia:
+
+        using CondaPkg; CondaPkg.add("libssh2"; version="<1.11.1")
+
+    See https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/issues/29.
+    """
+end
+
 function __init__()
     # Since it is illegal in PythonCall to import a python module in a module, we need to do this here.
     # https://juliapy.github.io/PythonCall.jl/dev/pythoncall-reference/#PythonCall.Core.pycopy!
-    PythonCall.pycopy!(datasets, pyimport("datasets"))
+    try
+        PythonCall.pycopy!(datasets, pyimport("datasets"))
+    catch err
+        _libssh2_conflict_hint(err)
+        rethrow()
+    end
     PythonCall.pycopy!(PIL, pyimport("PIL"))
     pyimport("PIL.Image")
     pyimport("PIL.PngImagePlugin")
