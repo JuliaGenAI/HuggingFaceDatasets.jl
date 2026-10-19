@@ -17,13 +17,16 @@ that lazily converts observations to Julia types).
   Python module handles (`datasets`, `PIL`, `np`, `copy`, `pickle`), initialized in
   `__init__` via `PythonCall.pycopy!`. Python modules must be imported there,
   not at module top level (PythonCall restriction — see the comment in the file).
-- `src/julia_formatter.py` — the Python `datasets` formatter behind the `"julia"` format
-  (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's Arrow dtype and
-  reads top-level string columns straight from Arrow as `object` arrays of `str`, skipping
-  numpy's fixed-width `<U{maxlen}` temporary), registered as format type `"julia"`. Its
-  source is read at precompile time and run in `__init__`, so the format type exists only
-  in processes that have loaded the package; `save_to_disk` (src/serialization.jl)
-  therefore saves `"julia"` as `"numpy"`.
+- `src/python/huggingfacedatasets_jl.py` — the Python `datasets` formatter behind the
+  `"julia"` format (`JuliaFormatter`, a `NumpyFormatter` subclass that keeps each column's
+  Arrow dtype and reads top-level string columns straight from Arrow as `object` arrays of
+  `str`, skipping numpy's fixed-width `<U{maxlen}` temporary), registered on import as
+  format type `"julia"`. `__init__` appends `src/python` to `sys.path` and imports it. The
+  registered name is a `str` subclass (`JuliaFormatType`) defined in the module, so a pickled
+  `"julia"`-formatted dataset references the module and unpickling it registers the
+  formatter: this is how `datasets`' spawned `num_proc` workers (Windows) get the format
+  without Julia. A plain Python process without that `sys.path` entry doesn't know
+  `"julia"`, so `save_to_disk` (src/serialization.jl) saves `"julia"` as `"numpy"`.
 - `src/dataset.jl` — `Dataset`, the wrapper over `datasets.Dataset`. 1-based
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).

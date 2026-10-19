@@ -65,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strings directly. On a batch of 1000 documents of 1k–100k characters, `ds[1:1000]` now
   allocates ~47 MiB of Python temporaries instead of ~430 MiB and runs about 3× faster; batches
   of short strings are several times faster too.
+- `ds.py.map(pyfn; num_proc=N)` and `ds.py.filter(pyfn; num_proc=N)` on a `"julia"`-formatted
+  dataset work on Windows, where they failed with `ValueError: Format type should be one of
+  [...], but got 'julia'` since the `"julia"` format got its own Python formatter (see above).
+  `datasets` runs them in worker processes, which on Windows start as fresh Python interpreters
+  that did not know the `"julia"` format; a worker now loads it when it receives the dataset
+  (without needing Julia), so `pyfn` gets its batches in the `"julia"` format, as on Linux and
+  macOS.
 
 ## [0.4.1] - 2026-07-06
 
