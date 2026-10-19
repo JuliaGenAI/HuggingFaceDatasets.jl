@@ -86,6 +86,13 @@ end
     @test pyconvert(String, r["u"].dtype.name) == "uint16"
     @test pyconvert(String, r["f"].dtype.name) == "float32"
     @test [r["u"] for r in ms] == 1:5
+
+    # N-D arrays are copied too: rows built in a reused buffer stay distinct once collected (#94)
+    buf = zeros(Float32, 2, 2)
+    rows = collect(itds.map(row -> (buf .= row["x"]; Dict("m" => buf))))
+    @test [r["m"] for r in rows] == [fill(x, 2, 2) for x in 1:5]
+    rows[1]["m"][1] = 100
+    @test buf == fill(5, 2, 2)
 end
 
 @testset "julia format keeps each column's dtype" begin

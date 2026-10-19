@@ -126,6 +126,11 @@ end
     # N-D numeric arrays go through jl2numpy (axis-reversed, round-trips via py2jl)
     x = Float32[1 2 3; 4 5 6]
     @test py2jl(jl2py(x)) == x
+    @test py2jl(jl2py(x')) == x'
+    # ... on a copy, unlike jl2numpy itself (#94)
+    y = jl2py(x)
+    x[1, 1] = 100
+    @test pyconvert(Float32, y[0, 0]) == 1
 
     # a vector of arrays becomes a python list of numpy arrays
     v = [Int[1, 2], Int[3, 4]]

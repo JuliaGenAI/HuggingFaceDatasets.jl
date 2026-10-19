@@ -85,6 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conda-forge's `libcurl`, used by `pyarrow`, needs a newer `libssh2` than the one Julia has
   already loaded. Use Julia ≥ 1.12, or run `CondaPkg.add("libssh2"; version="<1.11.1")` in your
   project and restart Julia.
+- A Julia function passed to `map` (on a `Dataset` or an `IterableDataset`) that fills one
+  preallocated matrix or N-D array and returns it for every row now gives each row its own
+  values, instead of all rows sharing that array's last contents. `jl2py` now copies N-D
+  arrays, as it already did for numeric vectors; `jl2numpy` still shares memory. (#94)
 
 ## [0.4.1] - 2026-07-06
 

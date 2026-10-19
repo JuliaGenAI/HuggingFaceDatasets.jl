@@ -632,6 +632,10 @@ end
     buf = zeros(Int, 2)
     dv = map(x -> (buf .= x["label"]; Dict("y" => buf)), dsj)
     @test [dv[i]["y"] for i in 1:6] == [fill(l, 2) for l in [5, 0, 4, 3, 2, 1]]
+    # ... and so is a reused N-D buffer (#94)
+    buf = zeros(Float32, 2, 2)
+    dv = map(x -> (buf .= x["label"]; Dict("m" => buf)), dsj)
+    @test [dv[i]["m"] for i in 1:6] == [fill(l, 2, 2) for l in [5, 0, 4, 3, 2, 1]]
 
     # property-style `ds.map` / `ds.filter` route to the julia-bridged versions above
     # (python interface), i.e. `ds.map(f)` == `map(f, ds)` — the callback still sees Julia
