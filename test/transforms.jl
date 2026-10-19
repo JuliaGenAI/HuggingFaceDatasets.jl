@@ -22,6 +22,9 @@
     @test col[2:3] == [0, 4]
     @test col[[3, 1]] == [4, 5]
     @test col[[true, false, true]] == [5, 4]   # logical indexing (Bool <: Integer)
+    @test col[3:-1:1] == [4, 0, 5]             # ranges are read as a Python `range`
+    @test col[Base.OneTo(2)] == [5, 0]
+    @test isempty(col[1:0])
     @test col == [5, 0, 4]
     @test collect(col) isa Vector{Int}
     @test collect(col) == [5, 0, 4]
@@ -31,6 +34,19 @@
     z = np.asarray(7)
     @test py2jl(z) == 7
     @test py2jl(z) isa Integer
+
+    # numeric numpy scalars (and 0-d arrays) keep their dtype instead of widening to Int64/Float64
+    for (name, T) in (("int8", Int8), ("int32", Int32), ("uint16", UInt16), ("uint64", UInt64),
+                      ("float16", Float16), ("float32", Float32), ("float64", Float64),
+                      ("complex64", ComplexF32), ("longlong", Int64))
+        s = pygetattr(np, name)(3)
+        @test py2jl(s) === T(3)
+        @test py2jl(np.asarray(s)) === T(3)
+    end
+    @test py2jl(np.bool_(true)) === true
+    @test py2jl(np.asarray(true)) === true
+    @test py2jl(np.str_("ab")) == "ab"
+    @test py2jl(np.asarray("ab")) == "ab"
 end
 
 @testset "jl2py" begin

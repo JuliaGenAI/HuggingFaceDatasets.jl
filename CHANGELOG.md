@@ -65,6 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strings directly. On a batch of 1000 documents of 1k–100k characters, `ds[1:1000]` now
   allocates ~47 MiB of Python temporaries instead of ~430 MiB and runs about 3× faster; batches
   of short strings are several times faster too.
+- Single values read under the `"julia"` format keep the column's dtype, as batches already did:
+  a `float32` column's lazy `Column` (`ds["col"]`) is now a `Column{Float32}` whose elements and
+  `collect` are `Float32` (they were `Float64`), and the rows of an `IterableDataset` have
+  `Int32`/`UInt8`/`Float32`/... values instead of `Int64`/`Float64`. `py2jl` converts numeric
+  numpy scalars and 0-d arrays to the Julia number of the same type.
+- `collect` on a lazy `Column` reads the column in one batch instead of row by row: on 200 000
+  `Float32` rows it takes 24 ms instead of 6.2 s, and on MNIST's 10 000 test images 0.28 s
+  instead of 0.66 s. Slicing a `Column` with a range (`col[a:b]`) reads one contiguous slice
+  instead of gathering a list of indices (490 ms → 25 ms on the 200 000 rows).
 
 ## [0.4.1] - 2026-07-06
 

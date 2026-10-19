@@ -11,6 +11,11 @@ compares, and `collect`s like an ordinary vector; `collect(col)` materializes it
 into a plain `Vector`. The element type `T` is inferred from the first element
 (`Any` if the column is empty).
 
+`collect(col)` and slicing with a range or a vector of indices (`col[a:b]`) read the
+rows in one batch. Element-wise access (`col[i]`, `for x in col`, `sum(col)`, broadcasting)
+costs a Python call per element, so for more than a few elements, slice or `collect`
+first.
+
 Returned by [`py2jl`](@ref) on a `datasets.Column`, and hence by string indexing
 of a julia-formatted [`Dataset`], e.g. `ds["label"]`.
 
@@ -60,10 +65,13 @@ function Base.getindex(c::Column, i::Integer)
     return py2jl(pyobj(c)[i - 1])
 end
 
-# Fetch a batch of indices in a single python round-trip instead of one per element.
+# Fetch a batch of indices in a single python round-trip instead of one per element. A range
+# goes as a Python `range`, which `datasets` reads as one Arrow slice; a list of indices is
+# validated and gathered one by one.
 function Base.getindex(c::Column, ii::AbstractVector{<:Integer})
     @boundscheck checkbounds(c, ii)
-    return py2jl(pyobj(c)[pylist(Int[i - 1 for i in ii])])
+    key = ii isa AbstractRange ? ii .- 1 : pylist(Int[i - 1 for i in ii])
+    return py2jl(pyobj(c)[key])
 end
 
 # Logical indexing (`Bool <: Integer`, so this must be handled separately).
@@ -75,5 +83,13 @@ end
 # Nested columns (struct features): `col["field"]` returns another lazy `Column`.
 Base.getindex(c::Column, name::AbstractString) = Column(pyobj(c)[name])
 
-# Convert the whole python column in one shot rather than element by element.
-Base.collect(c::Column) = py2jl(pylist(pyobj(c)))
+# Read the whole column as one batch: iterating the python column would format and convert
+# it row by row. A fixed-size array column comes back stacked along its last axis, so split
+# it into one array per row.
+function Base.collect(c::Column{T}) where {T}
+    isempty(c) && return T[]
+    x = c[1:length(c)]
+    x isa AbstractVector && return x
+    x isa AbstractArray && return [copy(selectdim(x, ndims(x), j)) for j in axes(x, ndims(x))]
+    return py2jl(pylist(pyobj(c)))   # a batch `py2jl` can't convert, e.g. from a torch format
+end
