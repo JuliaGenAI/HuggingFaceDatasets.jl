@@ -202,12 +202,14 @@ numpy scalar of the same dtype, so `datasets` stores it with its type (a `Float3
 
 A vector of numpy-native numbers (`Bool`, `Int8`–`Int64`, `UInt8`–`UInt64`,
 `Float16`–`Float64`) becomes a 1-D numpy array of the same dtype, so `datasets` stores it
-with its element type (a `Vector{UInt16}` becomes `uint16`, not `int64`). The vector is
-copied, so mutating it afterwards does not affect the result. Any other vector (of strings,
-arrays, `Union{Missing, Int}`, `BigInt`, ...) becomes a Python list of converted elements.
-Multi-dimensional numeric `AbstractArray`s are converted with [`jl2numpy`](@ref) (copyless,
-with the documented axis reversal); other leaves are handed to PythonCall's default `Py`
+with its element type (a `Vector{UInt16}` becomes `uint16`, not `int64`). Any other vector
+(of strings, arrays, `Union{Missing, Int}`, `BigInt`, ...) becomes a Python list of converted
+elements. Multi-dimensional numeric `AbstractArray`s are converted with [`jl2numpy`](@ref)
+(with the documented axis reversal); other leaves are handed to PythonCall's default `Py`
 conversion.
+
+Unlike `jl2numpy`, which shares memory, `jl2py` copies numeric vectors and multi-dimensional
+arrays, so mutating them afterwards does not affect the result.
 
 This is the write-path dual of `py2jl`, used to bridge pure-Julia callbacks into the
 Python `datasets` API (see the Julia-friendly [`map`](@ref) / [`filter`](@ref) overloads).
@@ -279,6 +281,6 @@ function jl2py(x::AbstractVector)
     return pylist(jl2py(el) for el in x)
 end
 
-# N-D (N ≥ 2) numeric arrays go through the copyless numpy view; non-numeric vectors are
+# N-D (N ≥ 2) arrays are copied for the same reason as numeric vectors; non-numeric vectors are
 # handled element-wise above so a `Vector` of arrays becomes a Python list of numpy arrays.
-jl2py(x::AbstractArray) = jl2numpy(x)
+jl2py(x::AbstractArray) = jl2numpy(collect(x))

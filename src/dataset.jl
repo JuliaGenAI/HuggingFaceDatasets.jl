@@ -188,10 +188,10 @@ _column_to_py(k::AbstractString, v::AbstractVector) = jl2py(v)
 
 # A column given as a single stacked N-D array: the LAST axis indexes observations (the
 # MLUtils convention, matching what the numpy read path stacks into), so split along it
-# into per-observation arrays before handing off to `jl2py`.
+# into per-observation views; `jl2py` copies each one.
 function _column_to_py(k::AbstractString, v::AbstractArray)
     n = size(v, ndims(v))
-    obs = [copy(selectdim(v, ndims(v), i)) for i in 1:n]
+    obs = [selectdim(v, ndims(v), i) for i in 1:n]
     return jl2py(obs)
 end
 
