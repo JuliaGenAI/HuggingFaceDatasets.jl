@@ -65,6 +65,28 @@ function _ondisk_py(ds::Dataset)
     return getfield(load_from_disk(dir)::Dataset, :py)
 end
 
+# `save_to_disk` stores the Python format type, and "julia" exists only where this package is
+# loaded. Save it as "numpy", as before the "julia" formatter existed, so plain Python can
+# `load_from_disk` the result (this package's `load_from_disk` re-applies "julia" anyway).
+function _save_to_disk(py::Py, args...; kws...)
+    _without_julia_format(py).save_to_disk(args...; kws...)
+    return nothing
+end
+
+function _without_julia_format(py::Py)
+    if pyisinstance(py, datasets.DatasetDict)
+        d = datasets.DatasetDict()
+        for (k, v) in py.items()
+            d[k] = _without_julia_format(v)
+        end
+        return d
+    elseif pyeq(Bool, py._format_type, "julia")
+        py = pycopy.copy(py)   # shallow: shares the Arrow data, keeps format columns/kwargs
+        py._format_type = "numpy"
+    end
+    return py
+end
+
 function Serialization.serialize(s::AbstractSerializer, ds::Dataset)
     Serialization.serialize_type(s, Dataset)
     # `pickle` carries the data (by reference to the on-disk Arrow files) AND the Python

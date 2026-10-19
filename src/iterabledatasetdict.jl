@@ -127,7 +127,7 @@ Set the format of every split of `d` to `format`. Mutating version of [`with_for
 """
 function set_format!(d::IterableDatasetDict, format)
     if format == "julia"
-        d.py = getfield(d, :py).with_format("numpy")
+        d.py = getfield(d, :py).with_format("julia")
         d.jltransform = _jltransform_dict(getfield(d, :py), py2jl)
     else
         d.py = getfield(d, :py).with_format(format)

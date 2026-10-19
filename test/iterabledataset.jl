@@ -81,6 +81,14 @@ end
     @test v == [1, 2]
 end
 
+@testset "julia format keeps each column's dtype" begin
+    x = rand(3, 4)
+    itds = Dataset((; x, f = [1.0000000001, 2.0, 3.0, 4.0])).to_iterable_dataset()
+    rows = collect(itds)
+    @test rows[1]["x"] isa Vector{Float64} && rows[1]["x"] == x[:, 1]
+    @test rows[1]["f"] === 1.0000000001
+end
+
 @testset "format switching" begin
     ds = Dataset((; x = [1, 2, 3]))
     itds = ds.to_iterable_dataset()
