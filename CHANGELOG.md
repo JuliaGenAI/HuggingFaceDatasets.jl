@@ -71,6 +71,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strings directly. On a batch of 1000 documents of 1k–100k characters, `ds[1:1000]` now
   allocates ~47 MiB of Python temporaries instead of ~430 MiB and runs about 3× faster; batches
   of short strings are several times faster too.
+- On Windows with Julia 1.10 or 1.11, where loading the package fails with `ImportError: DLL load
+  failed while importing lib` (#29), an error message now explains the cause and the workaround:
+  conda-forge's `libcurl`, used by `pyarrow`, needs a newer `libssh2` than the one Julia has
+  already loaded. Use Julia ≥ 1.12, or run `CondaPkg.add("libssh2"; version="<1.11.1")` in your
+  project and restart Julia.
 
 ## [0.4.1] - 2026-07-06
 
