@@ -45,6 +45,15 @@ include("features.jl")
 export Features, ClassLabel
 @compat public Value, features, class_names, int2str, str2int
 
+# Declare the wrapper types as Python wrappers (PythonCall's "custom wrappers"): passing one to
+# any Python call, as an argument, a keyword (`features = ds.features`) or a container element,
+# hands Python the wrapped object instead of an opaque `juliacall.AnyValue`.
+for T in (Dataset, DatasetDict, IterableDataset, IterableDatasetDict, Column, Features,
+          ClassLabel, Value)
+    @eval PythonCall.ispy(::$T) = true
+    @eval PythonCall.Py(x::$T) = getfield(x, :py)
+end
+
 include("load_dataset.jl")
 export load_dataset
 

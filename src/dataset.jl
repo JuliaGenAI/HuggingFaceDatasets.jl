@@ -54,9 +54,11 @@ mutable struct Dataset
 end
 
 """
-    Dataset(d::AbstractDict; jltransform = nothing)
-    Dataset(nt::NamedTuple; jltransform = nothing)
-    Dataset.from_dict(data; features = nothing, split = nothing)
+    Dataset(d::AbstractDict; features = nothing, info = nothing, split = nothing,
+            jltransform = nothing)
+    Dataset(nt::NamedTuple; features = nothing, info = nothing, split = nothing,
+            jltransform = nothing)
+    Dataset.from_dict(data; features = nothing, info = nothing, split = nothing)
 
 Build a `Dataset` from in-memory Julia data: a `Dict` or `NamedTuple` mapping column
 names to columns, delegating to `datasets.Dataset.from_dict`.
@@ -72,15 +74,18 @@ Array columns are converted with [`jl2numpy`](@ref), so the column-major/row-maj
 reversal is handled and round-trips: a single row reads back as the original Julia array
 and a range index stacks rows into a `(dims…, N)` tensor.
 
+`features`, `info` and `split` are forwarded to `datasets.Dataset.from_dict`; `features` can
+be another dataset's schema, e.g. `Dataset(data; features = ds.features)`, or a
+[`Features`](@ref) built in Julia.
+
 The dataset is returned in the `"julia"` format by default (observations converted to
 native Julia types on access). Pass a `jltransform` to install a custom transform instead,
 or call [`reset_format!`](@ref) for the raw Python observations.
 
 `Dataset.from_dict(data; kws...)` is the same construction exposed under the Python
 classmethod name (`datasets.Dataset.from_dict`): it accepts the same Julia `data` as above —
-and also a raw Python mapping — forwards keyword arguments such as `features` and `split` to
-Python, and likewise defaults to the `"julia"` format. For plain in-memory columns,
-`Dataset.from_dict(data)` is equivalent to `Dataset(data)`.
+and also a raw Python mapping — and likewise defaults to the `"julia"` format. For plain
+in-memory columns, `Dataset.from_dict(data)` is equivalent to `Dataset(data)`.
 
 See also [`with_format`](@ref), [`jl2py`](@ref), and [`jl2numpy`](@ref).
 
@@ -118,20 +123,21 @@ Dataset({
 })
 ```
 """
-Dataset(d::AbstractDict; jltransform = nothing) =
-    _from_julia_data(_from_dict_pydict(d), jltransform)
+Dataset(d::AbstractDict; jltransform = nothing, kws...) =
+    _from_julia_data(_from_dict_pydict(d), jltransform; kws...)
 
-Dataset(nt::NamedTuple; jltransform = nothing) =
-    _from_julia_data(_from_dict_pydict(nt), jltransform)
+Dataset(nt::NamedTuple; jltransform = nothing, kws...) =
+    _from_julia_data(_from_dict_pydict(nt), jltransform; kws...)
 
 """
-    Dataset(table; jltransform = nothing)
+    Dataset(table; features = nothing, info = nothing, split = nothing,
+            jltransform = nothing)
 
 Build a `Dataset` from any [Tables.jl](https://github.com/JuliaData/Tables.jl)-compatible
 source — a `DataFrame`, `CSV.File`, row table, and so on. The table is materialized to a
 column `NamedTuple` with `Tables.columntable` and then handed to the `Dataset(::NamedTuple)`
-column path, so column-name order, scalar columns, and the default `"julia"` format all
-behave exactly as for in-memory columns. This avoids the pandas dependency that
+column path, so column-name order, scalar columns, the keyword arguments, and the default
+`"julia"` format all behave exactly as for in-memory columns. This avoids the pandas dependency that
 `datasets.Dataset.from_pandas` would pull in and covers far more sources.
 
 See also [`Dataset(::AbstractDict)`](@ref) and [`with_format`](@ref).
@@ -156,18 +162,18 @@ julia> ds[1:3]["label"]
  4
 ```
 """
-function Dataset(table; jltransform = nothing)
+function Dataset(table; jltransform = nothing, kws...)
     Tables.istable(table) || throw(ArgumentError(
         "`Dataset(x)` expects a Tables.jl-compatible table, an `AbstractDict`, or a " *
         "`NamedTuple` of columns; got a $(typeof(table)), which is not a table"))
-    return Dataset(Tables.columntable(table); jltransform)
+    return Dataset(Tables.columntable(table); jltransform, kws...)
 end
 
 # Wrap a freshly built `datasets.Dataset` from Julia data. With no explicit `jltransform`
 # the dataset defaults to the `"julia"` format; passing a transform installs it instead
 # (leaving the Python format untouched, i.e. observations arrive as raw Python batches).
-function _from_julia_data(py::Py, jltransform)
-    ds = Dataset(datasets.Dataset.from_dict(py))
+function _from_julia_data(py::Py, jltransform; features = nothing, info = nothing, split = nothing)
+    ds = Dataset(datasets.Dataset.from_dict(py; features, info, split))
     return jltransform === nothing ? set_format!(ds, "julia") : set_jltransform!(ds, jltransform)
 end
 

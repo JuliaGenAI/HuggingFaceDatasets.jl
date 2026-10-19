@@ -209,9 +209,17 @@ julia> int2str(ds, "label", [0, 1, 1])   # decode a batch of ids in one call
 
 Reach these as `HuggingFaceDatasets.class_names` etc., or bring them into scope with
 `using HuggingFaceDatasets: class_names, int2str, str2int`. To **construct** a schema from
-Julia — e.g. to pass as a `features=` argument — build the wrapper types (also public but
-unexported: `HuggingFaceDatasets.ClassLabel(names=["neg", "pos"])`,
-`HuggingFaceDatasets.Value("int64")`) and hand them back to Python with [`jl2py`](@ref).
+Julia — e.g. to pass as a `features=` argument — build the wrapper types
+(`ClassLabel(names=["neg", "pos"])`, `HuggingFaceDatasets.Value("int64")`, `Features(…)`).
+These views, like a dataset's own `ds.features`, can be passed to Python methods as they are:
+
+```julia
+julia> sch = Features(Dict("label" => ClassLabel(names=["neg", "pos"])));
+
+julia> ds = Dataset((; label=[0, 1, 1]); features=sch);   # also `Dataset.from_dict(…; features=…)`
+
+julia> ds2 = Dataset((; label=[1, 0])).cast(ds.features);  # or `.cast_column("label", ds.features["label"])`
+```
 
 ## The `"julia"` format and transforms
 

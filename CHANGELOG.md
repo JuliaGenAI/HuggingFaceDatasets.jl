@@ -52,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pickle` on the main task and loading this package on the workers — is handled upstream by
   MLUtils, so no wrapper type is exported here. An `@info` notes when an in-memory dataset is
   first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
+- `Dataset(::AbstractDict)`, `Dataset(::NamedTuple)` and the Tables.jl constructor accept the
+  `features`, `info` and `split` keywords of `datasets.Dataset.from_dict`, e.g.
+  `Dataset(data; features = ds.features)` (#92).
 
 ### Fixed
 - A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
@@ -102,6 +105,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Julia functions work with the `map`/`filter` options that pass extra arguments: `with_indices`
   (0-based indices), `fn_kwargs` and `DatasetDict.map`'s `with_split`. They used to fail with a
   `MethodError`.
+- The `Features`, `ClassLabel` and `Value` views, and the `Dataset`, `DatasetDict`,
+  `IterableDataset`, `IterableDatasetDict` and `Column` wrappers, can be passed to Python as they
+  are (#92): to forwarded methods (`ds2.cast(ds.features)`, `ds2.cast_column("x", ds.features["x"])`),
+  as keyword arguments (`ds.map(f; features = ds.features)`,
+  `Dataset.from_dict(data; features = ds.features)`), and to raw `datasets` calls, also inside a
+  Julia `Vector` or `Dict`. They used to reach Python as opaque Julia objects and fail; `Py(x)` now
+  returns the wrapped Python object.
 
 ## [0.4.1] - 2026-07-06
 
