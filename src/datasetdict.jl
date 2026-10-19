@@ -138,6 +138,8 @@ function _method_override(d::DatasetDict, s::Symbol)
         return (f; kws...) -> map(f, d; kws...)
     elseif s === :filter
         return (f; kws...) -> filter(f, d; kws...)
+    elseif s === :save_to_disk
+        return (args...; kws...) -> _save_to_disk(getfield(d, :py), args...; kws...)
     else
         return nothing
     end
@@ -348,7 +350,7 @@ version of [`with_format`](@ref).
 """
 function set_format!(d::DatasetDict, format)
     if format == "julia"
-        d.py.set_format("numpy")
+        d.py.set_format("julia")
         d.jltransform = _jltransform_dict(d.py, py2jl)
     else
         d.py.set_format(format)

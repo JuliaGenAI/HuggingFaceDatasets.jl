@@ -215,6 +215,8 @@ function _method_override(ds::Dataset, s::Symbol)
         return (f; kws...) -> map(f, ds; kws...)
     elseif s === :filter
         return (f; kws...) -> filter(f, ds; kws...)
+    elseif s === :save_to_disk
+        return (args...; kws...) -> _save_to_disk(getfield(ds, :py), args...; kws...)
     else
         return nothing
     end
@@ -388,8 +390,10 @@ Base.show(io::IO, ds::Dataset) = print(io, ds.py)
     with_format(ds::Dataset, format)
 
 Return a copy of `ds` with the format set to `format`.
-If format is `"julia"`, the returned dataset is backed by `datasets`' `numpy` format and
-transformed with [`py2jl`](@ref), using copyless conversion from python types when possible.
+If format is `"julia"`, the returned dataset is read through this package's `"julia"` Python
+formatter (`datasets`' `numpy` formatter, minus its cast of integers to `int64` and floats to
+`float32`, so each column keeps its dtype) and transformed with [`py2jl`](@ref), using
+copyless conversion from python types when possible.
 `nothing` removes all formatting (raw Python observations). Any other string is forwarded to
 `datasets`' own `set_format` (`"numpy"`, `"torch"`, ...), with observations left as raw Python
 objects.
@@ -421,17 +425,19 @@ end
 
 Set the format of `ds` to `format`. Mutating version of [`with_format`](@ref).
 
-`format == "julia"` installs the julia format (numpy-backed + [`py2jl`](@ref)); `nothing`
-removes all formatting (raw Python observations); any other string is forwarded to
-`datasets`' `set_format` (`"numpy"`, `"torch"`, ...). The single-argument form
-`set_format!(ds)` restores the default julia format (see [`reset_format!`](@ref)).
+`format == "julia"` installs the julia format (the dtype-preserving `"julia"` Python
+formatter + [`py2jl`](@ref)); `nothing` removes all formatting (raw Python observations); any
+other string is forwarded to `datasets`' `set_format` (`"numpy"`, `"torch"`, ...). The
+single-argument form `set_format!(ds)` restores the default julia format (see
+[`reset_format!`](@ref)).
 """
 function set_format!(ds::Dataset, format)
     if format == "julia"
-        # Use the numpy format so numeric array columns decode as real N-D arrays and a
-        # range index stacks rows into an `(N, dims…)` tensor; `py2jl` (zero-copy) then
-        # reverses the axes to a Julia `(dims…, N)` array with the observation axis last.
-        ds.py.set_format("numpy")
+        # The "julia" formatter (`julia_formatter.py`) is numpy-based, so numeric array columns
+        # decode as real N-D arrays and a range index stacks rows into an `(N, dims…)` tensor;
+        # `py2jl` (zero-copy) then reverses the axes to a Julia `(dims…, N)` array with the
+        # observation axis last.
+        ds.py.set_format("julia")
         ds.jltransform = py2jl
     else
         ds.py.set_format(format)

@@ -9,7 +9,8 @@ import MLUtils
 roundtrip(ds) = (io = IOBuffer(); serialize(io, ds); seekstart(io); deserialize(io))
 
 @testset "julia format round-trip" begin
-    ds = Dataset((; x = reshape(collect(1:8*20), 8, 20), label = collect(0:19)))
+    w = rand(3, 20)
+    ds = Dataset((; x = reshape(collect(1:8*20), 8, 20), label = collect(0:19), w))
     ds2 = roundtrip(ds)
     @test ds2 isa Dataset
     @test length(ds2) == length(ds) == 20
@@ -17,6 +18,7 @@ roundtrip(ds) = (io = IOBuffer(); serialize(io, ds); seekstart(io); deserialize(
     @test ds2[1:20]["x"] == ds[1:20]["x"]
     @test ds2[3]["x"] isa Vector{Int}          # "julia" format preserved → native Julia arrays
     @test ds2[3] == ds[3]
+    @test ds2[1:20]["w"] == w                  # Float64 kept (not cast to Float32)
 end
 
 @testset "format preserved across round-trip" begin
@@ -48,9 +50,11 @@ end
     procs = addprocs(1; exeflags = "--project=$(dirname(Base.active_project()))")
     try
         @everywhere procs using HuggingFaceDatasets
-        ds = Dataset((; x = reshape(collect(1:8*20), 8, 20), label = collect(0:19)))
+        w = rand(3, 20)
+        ds = Dataset((; x = reshape(collect(1:8*20), 8, 20), label = collect(0:19), w))
         got = remotecall_fetch(d -> d[1:20], only(procs), ds)   # ds serialized to the worker
         @test got["x"] == ds[1:20]["x"]
+        @test got["w"] == w                    # the worker has the "julia" formatter too
         @test got["label"] == ds[1:20]["label"]
     finally
         rmprocs(procs)

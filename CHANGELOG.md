@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still copied. A bonus fix: buffer cleanup now routes through PythonCall's GIL-deferred decref
   instead of DLPack's GIL-reentering finalizer, so a numpy buffer freed on a `DataLoader`
   `parallel=true` worker thread can no longer deadlock against a thread compiling under the GIL.
+- **The `"julia"` format keeps each column's dtype** (#78). It used to read data through
+  `datasets`' `numpy` format, which casts every integer column to `Int64` and every float column
+  to `Float32`. It now uses its own `"julia"` Python formatter, so a `uint16` column comes back
+  as `UInt16` (instead of a 4× larger `Int64`), a `float64` column as `Float64` (instead of
+  silently losing precision as `Float32`), an `int32` column as `Int32`, and so on, for `Dataset`,
+  `DatasetDict`, `IterableDataset`, and `IterableDatasetDict`. The Python format type is now
+  `"julia"` (`ds.format["type"] == "julia"`); the `"numpy"` format is unchanged. Since that format
+  type exists only in Python processes that have loaded this package, `ds.save_to_disk(path)`
+  stores a `"julia"`-formatted dataset with the `"numpy"` format, so plain Python can still
+  `load_from_disk` it.
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel

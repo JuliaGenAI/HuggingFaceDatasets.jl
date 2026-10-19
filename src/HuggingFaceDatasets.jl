@@ -12,6 +12,11 @@ const np = PythonCall.pynew()
 const pycopy = PythonCall.pynew() # the python `copy` module (renamed to avoid shadowing `Base.copy`)
 const pickle = PythonCall.pynew() # used to (de)serialize `Dataset` by reference for `Distributed`
 
+# Python source of the formatter behind the "julia" format, run in `__init__`.
+const _FORMATTER_PATH = joinpath(@__DIR__, "julia_formatter.py")
+include_dependency(_FORMATTER_PATH)
+const _FORMATTER_CODE = read(_FORMATTER_PATH, String)
+
 export datasets
 
 include("callable.jl")
@@ -69,6 +74,10 @@ function __init__()
     PythonCall.pycopy!(np, pyimport("numpy"))
     PythonCall.pycopy!(pycopy, pyimport("copy"))
     PythonCall.pycopy!(pickle, pyimport("pickle"))
+
+    # Register the "julia" format type with `datasets`.
+    pybuiltins.exec(pybuiltins.compile(_FORMATTER_CODE, _FORMATTER_PATH, "exec"),
+                    pydict(; __name__ = "HuggingFaceDatasets.julia_formatter"))
 
     # Pin the already-resolved Python interpreter for any child processes.
     #
