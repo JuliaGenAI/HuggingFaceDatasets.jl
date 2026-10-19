@@ -184,9 +184,16 @@ end
 
 Convert Julia values to Python, the inverse of [`py2jl`](@ref). Recursively traverses
 `AbstractDict`, `NamedTuple`, `Tuple`, and `AbstractVector` containers, converting the
-leaves. Multi-dimensional numeric `AbstractArray`s are converted with [`jl2numpy`](@ref)
-(copyless, with the documented axis reversal); other leaves are handed to PythonCall's
-default `Py` conversion.
+leaves.
+
+A vector of numpy-native numbers (`Bool`, `Int8`–`Int64`, `UInt8`–`UInt64`,
+`Float16`–`Float64`) becomes a 1-D numpy array of the same dtype, so `datasets` stores it
+with its element type (a `Vector{UInt16}` becomes `uint16`, not `int64`). The vector is
+copied, so mutating it afterwards does not affect the result. Any other vector (of strings,
+arrays, `Union{Missing, Int}`, `BigInt`, ...) becomes a Python list of converted elements.
+Multi-dimensional numeric `AbstractArray`s are converted with [`jl2numpy`](@ref) (copyless,
+with the documented axis reversal); other leaves are handed to PythonCall's default `Py`
+conversion.
 
 This is the write-path dual of `py2jl`, used to bridge pure-Julia callbacks into the
 Python `datasets` API (see the Julia-friendly [`map`](@ref) / [`filter`](@ref) overloads).
@@ -195,10 +202,13 @@ Python `datasets` API (see the Julia-friendly [`map`](@ref) / [`filter`](@ref) o
 
 ```jldoctest
 julia> jl2py(Dict("label" => [1, 2, 3]))
-Python: {'label': [1, 2, 3]}
+Python: {'label': array([1, 2, 3])}
 
-julia> jl2py((1, "a", [2, 3]))
-Python: (1, 'a', [2, 3])
+julia> jl2py(UInt16[1, 2, 3])
+Python: array([1, 2, 3], dtype=uint16)
+
+julia> jl2py((1, "a", ["b", "c"]))
+Python: (1, 'a', ['b', 'c'])
 ```
 """
 jl2py(x) = Py(x)
@@ -229,7 +239,22 @@ function jl2py(x::NamedTuple)
 end
 
 jl2py(x::Tuple) = pytuple(Tuple(jl2py(el) for el in x))
-jl2py(x::AbstractVector) = pylist(jl2py(el) for el in x)
-# N-D (N ≥ 2) numeric arrays go through the copyless numpy view; vectors are handled
-# element-wise above so a `Vector` of arrays becomes a Python list of numpy arrays.
+
+# Numpy dtypes that Arrow can store. Complex has no Arrow type; `Int128`, `Rational`, ... would
+# become numpy `object` arrays of Julia values.
+const _NumpyReal = Union{Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64,
+                         Float16, Float32, Float64}
+
+function jl2py(x::AbstractVector)
+    # `isconcretetype` rules out `Union{}` and eltypes like `Union{Int32, Int64}` (also `object`)
+    if isconcretetype(eltype(x)) && eltype(x) <: _NumpyReal
+        # Copy: `datasets` buffers non-batched `map` rows and `IterableDataset` yields them
+        # as-is, so a shared view would alias a vector the caller may reuse.
+        return jl2numpy(collect(x))
+    end
+    return pylist(jl2py(el) for el in x)
+end
+
+# N-D (N ≥ 2) numeric arrays go through the copyless numpy view; non-numeric vectors are
+# handled element-wise above so a `Vector` of arrays becomes a Python list of numpy arrays.
 jl2py(x::AbstractArray) = jl2numpy(x)

@@ -216,6 +216,16 @@ end
     # batched map keyword is forwarded
     db = dd.map(x -> Dict("label" => x["label"] .* 2); batched=true)
     @test db["train"][1:4]["label"] == [10, 0, 8, 6]
+
+    # batched filter: the `BitVector` mask is handed to Python as a numpy bool array
+    dfb = dd.filter(x -> x["label"] .> 2; batched=true)
+    @test sort(dfb["train"][1:length(dfb["train"])]["label"]) == [3, 4, 5]
+    @test length(dfb["test"]) == 0
+
+    # numeric vectors returned by `f` keep their element type (#80)
+    dv = dd.map(x -> Dict("y" => UInt8.(x["label"])); batched=true)
+    @test all(dv[k].features["y"].dtype == "uint8" for k in keys(dv))
+    @test dv["train"][1:4]["y"] == [5, 0, 4, 3]
 end
 
 @testset "keys/length are cached and stay correct" begin
