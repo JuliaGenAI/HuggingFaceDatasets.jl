@@ -17,3 +17,9 @@ function (cw::CallableWrapper)(args...; kwargs...)
     end
     return y
 end
+
+# The Python function handed to `datasets`' `map`/`filter` for the Julia callback `f`. `pyfunc`
+# passes the arguments as raw `Py`s, so `py2jl` converts them; a plain Julia function would get
+# PythonCall's own conversion (`PyDict`, `PyArray`, ...), on which `py2jl` is a no-op.
+_pycallback(f) =
+    pyfunc((args...; kws...) -> jl2py(f(map(py2jl, args)...; map(py2jl, values(kws))...)))

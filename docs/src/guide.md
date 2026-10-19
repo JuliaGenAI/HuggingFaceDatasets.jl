@@ -326,9 +326,10 @@ the copy does not affect the original.
 existing one. The overloads [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridge the
 callback for you: each example (or batch, with `batched=true`) is converted with
 [`py2jl`](@ref) before `f` sees it, and `f`'s Julia return value is converted back to
-Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). You can therefore write a
-pure-Julia transform while still getting `datasets`' batching and caching (but not its
-multiprocessing, see below):
+Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). Under the `"julia"` format, `f`
+sees what indexing returns: a `Dict` of Julia `Array`s (of each column's element type),
+`String`s and numbers. You can therefore write a pure-Julia transform while still getting
+`datasets`' batching and caching (but not its multiprocessing, see below):
 
 ```julia-repl
 julia> ds = Dataset((; label=[5, 0, 4]));

@@ -227,6 +227,14 @@ end
     @test all(dv[k].features["y"].dtype == "uint8" for k in keys(dv))
     @test dv["train"][1:4]["y"] == [5, 0, 4, 3]
 
+    # the callback sees `py2jl` values (#91), and `with_split` passes the split name
+    seen = Ref{Any}()
+    dd.map(b -> (seen[] = b; b); batched=true)
+    @test seen[]["label"] isa Vector{Int}
+    ds = dd.map((b, split) -> Dict("split" => fill(split, length(b["label"]))); batched=true,
+                with_split=true)
+    @test ds["train"][1]["split"] == "train" && ds["test"][2]["split"] == "test"
+
     # `num_proc ≥ 1` would fork workers that cannot call back into Julia
     @test_throws ArgumentError map(x -> x, dd; num_proc=2)
     @test_throws ArgumentError dd.map(x -> x; num_proc=1)

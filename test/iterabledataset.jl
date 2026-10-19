@@ -95,6 +95,30 @@ end
     @test buf == fill(5, 2, 2)
 end
 
+@testset "map / filter callbacks see py2jl values (#91)" begin
+    itds = Dataset((; x = UInt16[1, 2, 3, 4])).to_iterable_dataset()
+    seen = Ref{Any}()
+
+    # a batched map re-batches formatted rows: the column is a typed `Array`, not an `object`
+    # array of numpy scalars (as with `datasets` < 5.1)
+    collect(itds.map(b -> (seen[] = b; b); batched=true, batch_size=2))
+    @test seen[]["x"] isa Vector{UInt16} && seen[]["x"] == [3, 4]
+    m = itds.map(b -> Dict("y" => UInt8.(b["x"])); batched=true, batch_size=2)
+    @test [r["y"] for r in m] == [1, 2, 3, 4]
+
+    collect(itds.map(x -> (seen[] = x; x)))
+    @test seen[] == Dict("x" => UInt16(4))
+    @test first(itds)["x"] isa UInt16                   # rows keep the column's type too
+
+    @test [r["x"] for r in itds.filter((x, i) -> iseven(i); with_indices=true)] == [1, 3]
+
+    # the `"julia"` formatter stacks a list of numpy scalars by dtype
+    fmt = datasets.formatting.get_formatter("julia")
+    a = fmt._consolidate(pylist([np.uint16(1), np.uint16(2)]))
+    @test pyconvert(String, a.dtype.name) == "uint16"
+    @test pyconvert(String, fmt._consolidate(pylist([np.uint16(1), np.int8(2)])).dtype.name) == "object"
+end
+
 @testset "julia format keeps each column's dtype" begin
     x = rand(3, 4)
     itds = Dataset((; x, f = [1.0000000001, 2.0, 3.0, 4.0])).to_iterable_dataset()

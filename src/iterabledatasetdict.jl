@@ -91,8 +91,7 @@ Lazily apply `f` to every example of every split, bridging Julia values on both 
 [`IterableDataset`](@ref) version. `d.map(f; ...)` is equivalent to this `map(f, d; ...)`.
 """
 function Base.map(f, d::IterableDatasetDict; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(d, :py).map(g; kws...)
+    y = getfield(d, :py).map(_pycallback(f); kws...)
     return IterableDatasetDict(y, getfield(d, :jltransform))
 end
 
@@ -104,8 +103,7 @@ Lazily filter every split by the Julia predicate `f`, applied per example, bridg
 within every split (matching Python), not split entries.
 """
 function Base.filter(f, d::IterableDatasetDict; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(d, :py).filter(g; kws...)
+    y = getfield(d, :py).filter(_pycallback(f); kws...)
     return IterableDatasetDict(y, getfield(d, :jltransform))
 end
 

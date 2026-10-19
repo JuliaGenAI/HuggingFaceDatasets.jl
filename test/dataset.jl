@@ -648,6 +648,31 @@ end
     @test sort(df[1:length(df)]["label"]) == [3, 4, 5]
 end
 
+@testset "map / filter callbacks see py2jl values (#91)" begin
+    ds = Dataset((; x = UInt16[1, 2, 3, 4], f = Float32[1, 2, 3, 4], s = ["a", "b", "c", "d"]))
+    seen = Ref{Any}()
+
+    ds.map(b -> (seen[] = b; b); batched=true)
+    @test seen[] isa Dict{String}
+    @test seen[]["x"] isa Vector{UInt16} && seen[]["x"] == 1:4    # an `Array`, not a `PyArray`
+    @test seen[]["f"] isa Vector{Float32}
+    @test seen[]["s"] isa Vector{String} && seen[]["s"] == ["a", "b", "c", "d"]
+
+    ds.map(x -> (seen[] = x; nothing))                             # one row: scalars keep their type
+    @test seen[] == Dict("x" => UInt16(4), "f" => 4.0f0, "s" => "d")
+    @test seen[]["x"] isa UInt16 && seen[]["f"] isa Float32
+
+    filter(b -> (seen[] = b; b["x"] .> 2), ds; batched=true)
+    @test seen[]["x"] isa Vector{UInt16}
+
+    # extra arguments from `datasets` are converted too: 0-based indices, `fn_kwargs`
+    r = ds.map((b, i; k) -> Dict("i" => i .+ k); batched=true, with_indices=true,
+               fn_kwargs=Dict("k" => 10))
+    @test r[:]["i"] == [10, 11, 12, 13]
+    @test ds.map((x, i) -> Dict("i" => i); with_indices=true)[:]["i"] == [0, 1, 2, 3]
+    @test length(ds.filter((x, i) -> isodd(i); with_indices=true)) == 2
+end
+
 @testset "julia map / filter reject num_proc" begin
     ds = Dataset((; label=[5, 0, 4, 3, 2, 1]))
     f = x -> Dict("label" => x["label"] .+ 100)

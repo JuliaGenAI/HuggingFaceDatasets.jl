@@ -146,8 +146,7 @@ returned `IterableDataset` applies `f` on the fly as it is iterated.
 callback. See also [`filter`](@ref).
 """
 function Base.map(f, ds::IterableDataset; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(ds, :py).map(g; kws...)
+    y = getfield(ds, :py).map(_pycallback(f); kws...)
     return IterableDataset(y, getfield(ds, :jltransform))
 end
 
@@ -159,8 +158,7 @@ Lazily filter the stream by the Julia predicate `f` through `datasets`'
 does. `ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`.
 """
 function Base.filter(f, ds::IterableDataset; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(ds, :py).filter(g; kws...)
+    y = getfield(ds, :py).filter(_pycallback(f); kws...)
     return IterableDataset(y, getfield(ds, :jltransform))
 end
 

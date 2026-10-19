@@ -245,8 +245,7 @@ See also [`filter`](@ref).
 """
 function Base.map(f, d::DatasetDict; kws...)
     _check_num_proc(:map; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(d, :py).map(g; kws...)
+    y = getfield(d, :py).map(_pycallback(f); kws...)
     return DatasetDict(y, getfield(d, :jltransform))
 end
 
@@ -267,8 +266,7 @@ format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`. 
 """
 function Base.filter(f, d::DatasetDict; kws...)
     _check_num_proc(:filter; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(d, :py).filter(g; kws...)
+    y = getfield(d, :py).filter(_pycallback(f); kws...)
     return DatasetDict(y, getfield(d, :jltransform))
 end
 

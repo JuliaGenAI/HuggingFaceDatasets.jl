@@ -315,6 +315,11 @@ example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before
 it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). This lets you
 write pure-Julia transforms while still getting `datasets`' batching and caching.
 
+Under the default `"julia"` format, `f` sees what indexing returns: a `Dict{String}` of Julia
+values, with numeric columns as `Array`s of the column's element type (not PythonCall's
+`PyDict`/`PyArray`). Extra arguments from `datasets` (the 0-based row indices with
+`with_indices=true`, `fn_kwargs`, ...) are converted with `py2jl` as well.
+
 Keyword arguments (`batched`, `batch_size`, `remove_columns`, ...) are forwarded to the
 Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
 
@@ -348,18 +353,17 @@ julia> ds2[1:3]["label"]
 """
 function Base.map(f, ds::Dataset; kws...)
     _check_num_proc(:map; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(ds, :py).map(g; kws...)
+    y = getfield(ds, :py).map(_pycallback(f); kws...)
     return Dataset(y, getfield(ds, :jltransform))
 end
 
 """
     filter(f, ds::Dataset; kws...)
 
-Filter `ds` through `datasets`' `filter`, bridging Julia values: each example (or batch,
-with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f` returns
-a `Bool` (or, when `batched=true`, a `Vector{Bool}`), converted back to Python with
-[`jl2py`](@ref).
+Filter `ds` through `datasets`' `filter`, bridging Julia values as [`map`](@ref) does: each
+example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it,
+and `f` returns a `Bool` (or, when `batched=true`, a vector of `Bool`s), converted back to
+Python with [`jl2py`](@ref).
 
 Keyword arguments are forwarded to the Python `filter`; the parent's julia format/transform
 is preserved on the returned `Dataset`.
@@ -375,8 +379,7 @@ See also [`map`](@ref).
 """
 function Base.filter(f, ds::Dataset; kws...)
     _check_num_proc(:filter; kws...)
-    g = x -> jl2py(f(py2jl(x)))
-    y = getfield(ds, :py).filter(g; kws...)
+    y = getfield(ds, :py).filter(_pycallback(f); kws...)
     return Dataset(y, getfield(ds, :jltransform))
 end
 
