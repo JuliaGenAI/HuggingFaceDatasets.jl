@@ -30,8 +30,11 @@ py2jl(x) = pyconvert(Any, x)
 _is_numeric_dtype(x::Py) = pyconvert(String, x.dtype.kind) in ("b", "i", "u", "f", "c")
 
 function py2jl(x::Py)
+    # Strings first: a text batch converts one per row, and each check below costs a Python call.
+    if pyisinstance(x, pybuiltins.str)
+        return pyconvert(String, x)
     # handle datasets
-    if pyisinstance(x, datasets.Dataset)
+    elseif pyisinstance(x, datasets.Dataset)
         return Dataset(x)
     elseif pyisinstance(x, datasets.DatasetDict)
         return DatasetDict(x)

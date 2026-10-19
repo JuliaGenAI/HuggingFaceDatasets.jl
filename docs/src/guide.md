@@ -258,11 +258,13 @@ to [`py2jl`](@ref), which recursively converts Python containers (lists, tuples,
 and numpy arrays into native Julia values, copylessly when possible. The formatter is
 `datasets`' `numpy` formatter without its cast of every integer column to `int64` and every
 float column to `float32`: each column keeps its own dtype, so a `uint16` column comes back as
-`UInt16` and a `float64` column as `Float64`. Because it decodes array and image cells to
-numeric arrays, an image column comes back as a raw array rather than a colorview (see
-[Working with images](@ref)). Any other format string (e.g. `"numpy"`, `"torch"`,
-`"pandas"`) is forwarded to the underlying Python `set_format`, and `nothing` clears the
-format entirely.
+`UInt16` and a `float64` column as `Float64`. String columns are read from Arrow as Python
+strings, without the fixed-width numpy unicode array (4 bytes per character of the longest
+string, for every row) that the `numpy` format builds. Because the formatter decodes array
+and image cells to numeric arrays, an image column comes back as a raw array rather than a
+colorview (see [Working with images](@ref)). Any other format string (e.g. `"numpy"`,
+`"torch"`, `"pandas"`) is forwarded to the underlying Python `set_format`, and `nothing`
+clears the format entirely.
 
 The `"julia"` format type exists only in Python processes that have loaded this package.
 `ds.save_to_disk(path)` therefore saves a `"julia"`-formatted dataset with the `"numpy"`
