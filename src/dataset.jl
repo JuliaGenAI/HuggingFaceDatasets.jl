@@ -390,8 +390,9 @@ Base.show(io::IO, ds::Dataset) = print(io, ds.py)
 Return a copy of `ds` with the format set to `format`.
 If format is `"julia"`, the returned dataset is backed by `datasets`' `numpy` format and
 transformed with [`py2jl`](@ref), using copyless conversion from python types when possible.
-Any other string is forwarded to `datasets`' own `set_format` (`"numpy"`, `"torch"`, ...),
-with observations left as raw Python objects.
+`nothing` removes all formatting (raw Python observations). Any other string is forwarded to
+`datasets`' own `set_format` (`"numpy"`, `"torch"`, ...), with observations left as raw Python
+objects.
 
 See also [`set_format!`](@ref) and [`reset_format!`](@ref).
 
@@ -410,7 +411,7 @@ Dict{String, Int64} with 1 entry:
   "label" => 5
 ```
 """
-function with_format(ds::Dataset, format::AbstractString)
+function with_format(ds::Dataset, format)
     ds = copy(ds)
     return set_format!(ds, format)
 end

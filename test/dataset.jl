@@ -243,6 +243,19 @@ end
     @test glue_ax.format["type"] == "numpy"
 end
 
+@testset "with_format(ds, nothing)" begin
+    ds = with_format(mnist, nothing)
+    @test ds isa Dataset
+    @test ds.format["type"] === nothing
+    x = ds[1]
+    @test @py isinstance(x, dict)
+    @test @py x["label"] === 7
+    @test mnist.with_format(nothing).format["type"] === nothing   # property-style form
+    # the original keeps the julia format
+    @test mnist.format["type"] == "numpy"
+    @test mnist[1]["label"] == 7
+end
+
 @testset "with_format(julia) - mnist" begin
     ds = with_format(mnist, "julia")
     @test ds.format["type"] == "numpy"  # the julia format is numpy + py2jl under the hood
