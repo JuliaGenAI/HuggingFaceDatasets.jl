@@ -319,7 +319,7 @@ end
 Apply `f` to `ds` through `datasets`' `map`, bridging Julia values on both sides: each
 example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees
 it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). This lets you
-write pure-Julia transforms while still getting `datasets`' batching and caching.
+write pure-Julia transforms while still getting `datasets`' batching and caching (see below).
 
 Under the default `"julia"` format, `f` sees what indexing returns: a `Dict{String}` of Julia
 values, with numeric columns as `Array`s of the column's element type (not PythonCall's
@@ -330,8 +330,22 @@ Keyword arguments (`batched`, `batch_size`, `remove_columns`, ...) are forwarded
 Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
 
 `ds.map(f; ...)` is equivalent to this `map(f, ds; ...)` (the property call routes here, not
-to Python). If you need to hand `map` a raw Python callback instead, use the underlying
-`ds.py.map(...)`.
+to Python). A Python callable `f` is handed to Python as is, like the underlying
+`ds.py.map(...)` does.
+
+!!! note "Caching"
+    `datasets` looks up a cached result by a fingerprint of the transform, which it computes by
+    pickling the function. A Julia function pickles by name, so after redefining `f`, or
+    changing a global it reads, the cached result would be silently reused, even in a new
+    session. So unless you pass `new_fingerprint`, every call gets a random fingerprint and
+    recomputes, as `datasets` does for a function it cannot hash. To reuse a cached result, pass
+    a `new_fingerprint` string that identifies this transform, and change it whenever `f` does.
+
+    For a dataset backed by files (from `load_dataset`, `load_from_disk`, ...), each call writes
+    a new cache file next to them. `ds.cleanup_cache_files()` deletes every cache file there that
+    `ds` doesn't use, including those of the datasets `map` returned; `datasets.disable_caching()`
+    writes them to a temporary directory instead. An existing `cache_file_name` is loaded as is,
+    unless `load_from_cache_file=false`.
 
 !!! warning "No multiprocessing (`num_proc`)"
     `datasets` runs `num_proc ≥ 1` in forked worker processes, which cannot call back into
@@ -357,9 +371,10 @@ julia> ds2[1:3]["label"]
  104
 ```
 """
-function Base.map(f, ds::Dataset; kws...)
+function Base.map(f, ds::Dataset; new_fingerprint = nothing, kws...)
     _check_num_proc(:map; kws...)
-    y = getfield(ds, :py).map(_pycallback(f); kws...)
+    fp = _fingerprint(f, new_fingerprint)
+    y = getfield(ds, :py).map(_pycallback(f); new_fingerprint = fp, kws...)
     return Dataset(y, getfield(ds, :jltransform))
 end
 
@@ -372,7 +387,8 @@ and `f` returns a `Bool` (or, when `batched=true`, a vector of `Bool`s), convert
 Python with [`jl2py`](@ref).
 
 Keyword arguments are forwarded to the Python `filter`; the parent's julia format/transform
-is preserved on the returned `Dataset`.
+is preserved on the returned `Dataset`. Like [`map`](@ref), each call recomputes unless you pass
+a `new_fingerprint`.
 
 `ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`; use the underlying
 `ds.py.filter(...)` for a raw Python callback.
@@ -383,11 +399,19 @@ defined in Python instead.
 
 See also [`map`](@ref).
 """
-function Base.filter(f, ds::Dataset; kws...)
+function Base.filter(f, ds::Dataset; new_fingerprint = nothing, kws...)
     _check_num_proc(:filter; kws...)
-    y = getfield(ds, :py).filter(_pycallback(f); kws...)
+    fp = _fingerprint(f, new_fingerprint)
+    y = getfield(ds, :py).filter(_pycallback(f); new_fingerprint = fp, kws...)
     return Dataset(y, getfield(ds, :jltransform))
 end
+
+# `datasets` fingerprints a transform by pickling it, and a Julia function pickles by name: a
+# redefined function, or a changed global, would hit the stale cache. Like `datasets` does for a
+# function it can't hash, use a random fingerprint unless the caller gives one. `datasets` can
+# hash a Python callable.
+_fingerprint(f, fp) = fp === nothing ? datasets.fingerprint.generate_random_fingerprint() : fp
+_fingerprint(f::Py, fp) = fp
 
 # `datasets` runs `map`/`filter` with `num_proc ≥ 1` (even 1) in a pool of forked worker
 # processes, where calling back into the Julia function makes the workers die or hang.

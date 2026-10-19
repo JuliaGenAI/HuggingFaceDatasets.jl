@@ -228,11 +228,16 @@ end
 """
     map(f, d::DatasetDict; kws...)
 
-Apply `f` to every example of every split of `d` through `datasets`' `DatasetDict.map`,
-bridging Julia values on both sides just like the [`Dataset`](@ref) version: each example (or
-batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f`'s
-return value is converted back with [`jl2py`](@ref). Keyword arguments are forwarded to the
-Python `map`, and each split keeps its own julia format/transform.
+Apply `f` to every example of every split of `d`, bridging Julia values on both sides just
+like the [`Dataset`](@ref) version (which this calls on each split): each example (or batch,
+with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f`'s return
+value is converted back with [`jl2py`](@ref). Keyword arguments are those of `datasets`'
+`DatasetDict.map`, and each split keeps its own julia format/transform. With
+`with_split=true`, `f` gets the split name as its last positional argument.
+
+Like the `Dataset` version, every call recomputes unless you pass a `new_fingerprint`, here a
+`Dict` mapping each split name to its fingerprint, like `cache_file_names` (splits stored in
+the same directory would otherwise share a cache file).
 
 `d.map(f; ...)` is equivalent to this `map(f, d; ...)`; use `d.py.map(...)` for a raw Python
 callback.
@@ -243,10 +248,12 @@ function defined in Python instead.
 
 See also [`filter`](@ref).
 """
-function Base.map(f, d::DatasetDict; kws...)
+function Base.map(f, d::DatasetDict; with_split::Bool = false, kws...)
     _check_num_proc(:map; kws...)
-    y = getfield(d, :py).map(_pycallback(f); kws...)
-    return DatasetDict(y, getfield(d, :jltransform))
+    return _per_split(d; kws...) do ds, split, split_kws
+        g = with_split ? (args...; fkws...) -> f(args..., split; fkws...) : f
+        map(g, ds; split_kws...)
+    end
 end
 
 """
@@ -256,7 +263,8 @@ Filter every split of `d` by the Julia predicate `f`, applied per example (Pytho
 `DatasetDict.filter`), bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) exactly as
 [`map`](@ref) does. Returns a `DatasetDict` with the same splits, each keeping its own julia
 format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`. Like
-[`map`](@ref), it rejects `num_proc ≥ 1` with an `ArgumentError`.
+[`map`](@ref), it rejects `num_proc ≥ 1` with an `ArgumentError`, and recomputes unless you
+pass a per-split `new_fingerprint` `Dict`.
 
 !!! note
     This deliberately overrides the generic `AbstractDict` `filter` (which would filter split
@@ -266,9 +274,26 @@ format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`. 
 """
 function Base.filter(f, d::DatasetDict; kws...)
     _check_num_proc(:filter; kws...)
-    y = getfield(d, :py).filter(_pycallback(f); kws...)
-    return DatasetDict(y, getfield(d, :jltransform))
+    return _per_split((ds, split, split_kws) -> filter(f, ds; split_kws...), d; kws...)
 end
+
+# `datasets`' `DatasetDict.map`/`filter` take no `new_fingerprint`, so call the `Dataset` method
+# `op(ds, split, split_kws)` on each split, with that split's entry of the per-split keywords.
+function _per_split(op, d::DatasetDict; cache_file_names = nothing, new_fingerprint = nothing,
+                    kws...)
+    names = _by_split(:cache_file_names, cache_file_names)
+    fps = _by_split(:new_fingerprint, new_fingerprint)
+    return _wrap_pairs(
+        k => op(d[k], k, (; cache_file_name = get(names, k, nothing),
+                            new_fingerprint = get(fps, k, nothing), kws...))
+        for k in keys(d))
+end
+
+_by_split(::Symbol, ::Nothing) = Dict{String,Any}()
+_by_split(::Symbol, x::AbstractDict) = Dict{String,Any}(string(k) => v for (k, v) in x)
+_by_split(name::Symbol, x) = throw(ArgumentError(
+    "`$name` of a `DatasetDict` must be a `Dict` mapping each split name to its own value, got " *
+    "a $(typeof(x)): splits stored in the same directory would otherwise share a cache file"))
 
 function Base.deepcopy_internal(d::DatasetDict, stackdict::IdDict)
     haskey(stackdict, d) && return stackdict[d]::DatasetDict
