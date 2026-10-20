@@ -157,6 +157,83 @@ end
     @test x[1, 1] == 7.0                         # numpy -> julia (writable)
 end
 
+@testset "py2jl unwraps PythonCall wrappers" begin
+    @test py2jl(PyDict(pydict(Dict("a" => pylist([1, 2]))))) == Dict("a" => [1, 2])
+    @test py2jl(PyList(pylist(["a", "b"]))) == ["a", "b"]
+    @test py2jl(PyArray(np.arange(3, dtype = "int16"))) isa Vector{Int16}
+end
+
+# Fills freed numpy memory, so that reading an unrooted buffer returns other values (or crashes).
+_overwrite_freed() = [np.full(10^7, -1.0) for _ in 1:3]
+
+@noinline _reshaped_numpy(n) =
+    (a = numpy2jl(np.arange(n, dtype = "float64")); (WeakRef(a), reshape(a, 100, :)))
+
+@noinline _wrap_and_drop(x) = (numpy2jl(x); nothing)
+
+_refcount(x) = pyconvert(Int, pyimport("sys").getrefcount(x))
+
+@testset "numpy2jl roots each buffer while Julia views it (#106)" begin
+    roots = HuggingFaceDatasets._NUMPY_ROOTS
+    isrooted(a) = any(o -> o.value === HuggingFaceDatasets._buffer_owner(a), roots.owners)
+
+    # arrays with equal contents each keep their own buffer
+    ds = Dataset((; x = [fill(Float32(i), 100_000) for i in 1:20]))
+    x1 = ds[1:20]["x"]
+    x2 = ds[1:20]["x"]
+    @test isrooted(x1) && isrooted(x2)
+    GC.gc(); numpy2jl(np.zeros(1)); GC.gc()
+    junk = _overwrite_freed()
+    @test x1 == x2 && x1[1, 1] == 1 && x1[1, end] == 20
+
+    # `reshape`/`vec` of the array keep the buffer once the array itself is collected (before
+    # Julia 1.11, the reshaped array references the array, which is never collected first)
+    wa, r = _reshaped_numpy(10^6)
+    GC.gc(); numpy2jl(np.zeros(1)); GC.gc()
+    junk = _overwrite_freed()
+    @test VERSION < v"1.11" || wa.value === nothing
+    @test r[:] == 0:10^6-1
+
+    # the numpy array is released at the first conversion after its Julia array is collected
+    x = np.zeros(10)
+    n = _refcount(x)
+    _wrap_and_drop(x)
+    @test _refcount(x) > n
+    GC.gc()
+    numpy2jl(np.zeros(1))
+    @test _refcount(x) == n
+end
+
+@testset "numpy2jl runs the GC for the memory it wraps (#107)" begin
+    roots = HuggingFaceDatasets._NUMPY_ROOTS
+    GC.gc(); numpy2jl(np.zeros(1))
+    peak = 0
+    for _ in 1:30   # 1.2 GB in total, a 40 MB array at a time
+        numpy2jl(np.ones(10^7, dtype = "float32"))
+        peak = max(peak, roots.bytes)
+    end
+    @test peak ≤ 2 * HuggingFaceDatasets._NUMPY_GC_BYTES
+
+    # ... also when each array survives a young collection, which only a full one then frees
+    peak = 0
+    for _ in 1:30
+        a = numpy2jl(np.ones(10^7, dtype = "float32"))
+        GC.gc(false)
+        numpy2jl(np.ones(1))
+        a = nothing
+        peak = max(peak, roots.bytes)
+    end
+    @test peak ≤ 2 * HuggingFaceDatasets._NUMPY_GC_BYTES
+
+    # ... and when the caller holds a lock, which disables finalizers
+    peak = 0
+    @lock ReentrantLock() for _ in 1:30
+        numpy2jl(np.ones(10^7, dtype = "float32"))
+        peak = max(peak, roots.bytes)
+    end
+    @test peak ≤ 2 * HuggingFaceDatasets._NUMPY_GC_BYTES
+end
+
 # only if no CI
 # if isempty(ENV["CI"])
 #     @testset "py2jl" begin

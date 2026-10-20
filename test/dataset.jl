@@ -373,7 +373,7 @@ end
     @test b["f32"] isa Vector{Float32}
     @test b["f64"] isa Vector{Float64} && b["f64"] == [1.0000000001, 2.0]
     @test b["b"] isa Vector{Bool} && b["b"] == [true, false]
-    @test b["rag"] isa Vector{Vector{Int16}} && b["rag"] == [[1, 2, 3], [4]]
+    @test b["rag"] isa HuggingFaceDatasets.RaggedVector{Int16} && b["rag"] == [[1, 2, 3], [4]]
     @test b["a2"] isa Array{Float64, 3} && b["a2"] == cat(a2...; dims = 3)
 
     r = ds[1]
@@ -449,6 +449,129 @@ end
     it = ds.to_iterable_dataset()
     @test [r["s"] for r in it] == ["a", long, nothing]
     @test pyconvert(String, first(it.py.iter(batch_size = 2))["s"].dtype.kind) == "O"
+end
+
+@testset "julia format reads ragged lists of numbers from one buffer (#108)" begin
+    rows = [UInt16[1, 2, 3], UInt16[4], UInt16[5, 6], UInt16[]]
+    ds = Dataset((; ids = rows, y = [1, 2, 3, 4]))
+
+    r = ds[1:4]["ids"]
+    @test r isa HuggingFaceDatasets.RaggedVector{UInt16, Vector{UInt16}, Vector{Int64}}
+    @test r == rows && r[3] == [5, 6] && isempty(r[4])
+    @test r.values == UInt16[1, 2, 3, 4, 5, 6] && r.offsets == [0, 3, 4, 6, 6]
+    @test ds[2]["ids"] == UInt16[4]
+    @test ds[[3, 1]]["ids"] == rows[[3, 1]]
+    @test ds["ids"][2:4] == rows[2:4]                       # lazy `Column`
+    @test collect(ds["ids"]) isa Vector{Vector{UInt16}} && collect(ds["ids"]) == rows
+    @test first(ds.iter(batch_size = 4))["ids"] == rows
+    @test collect(ds.to_iterable_dataset().iter(batch_size = 2))[2]["ids"] == rows[3:4]
+
+    # offsets start at 0 for a slice of the Arrow table, and for one made of several chunks
+    sub = ds.select(pyrange(1, 4))
+    @test sub[1:2]["ids"].offsets == [0, 1, 3] && sub[1:2]["ids"] == rows[2:3]
+    cat = concatenate_datasets([ds, ds])
+    @test cat[3:6]["ids"] == vcat(rows, rows)[3:6]
+
+    # rows of equal length are stacked, floats and `large_list` columns work too
+    @test Dataset((; v = [Float32[1, 2], Float32[3, 4]]))[1:2]["v"] == Float32[1 3; 2 4]
+    feats = datasets.Features(pydict(Dict("v" => datasets.LargeList(datasets.Value("float64")))))
+    lds = Dataset.from_dict(Dict("v" => [[1.5], [2.5, 3.5]]); features = feats)
+    @test lds[1:2]["v"] isa HuggingFaceDatasets.RaggedVector{Float64, Vector{Float64}, Vector{Int64}}
+    @test lds[1:2]["v"] == [[1.5], [2.5, 3.5]]
+
+    # with nulls, the column is read as before
+    nds = with_format(Dataset(datasets.Dataset.from_dict(
+        pydict(Dict("v" => pylist([pylist([1, 2]), nothing, pylist([3])]))))), "julia")
+    @test isequal(nds[1:3]["v"], [[1, 2], nothing, [3]])
+
+    # Python callbacks see an object array of 1-D arrays, which `datasets` can write back, and
+    # equal-length rows as a writable array; a `dtype` passed to the format still applies
+    @test pyisinstance(ds.py[pyslice(0, 4)]["ids"], np.ndarray)
+    eq = Dataset((; v = [Float32[1, 2], Float32[3, 4]]))
+    @test pyconvert(Bool, eq.py[pyslice(0, 2)]["v"].flags.writeable)
+    @test pyconvert(String, ds.py.with_format("julia", dtype = "float64")[pyslice(0, 4)]["ids"][0].dtype.name) == "float64"
+    same = with_format(Dataset(ds.py.map(@pyeval("lambda b: b"); batched = true)), "julia")
+    @test same[1:4]["ids"] == rows
+    chained = ds.py.map(@pyeval("lambda b: {'n': [len(r) for r in b['ids']], 'ids2': b['ids']}");
+                        batched = true)
+    @test pyconvert(Vector{Int}, chained["n"][pyslice(0, 4)]) == [3, 1, 2, 0]
+    @test with_format(Dataset(chained), "julia")[1:4]["ids2"] == rows
+
+    # ... as do Julia functions, and a `RaggedVector` they return is written back
+    m = map(b -> Dict("ids2" => b["ids"], "n" => length.(b["ids"])), ds; batched = true)
+    @test m[1:4]["ids2"] == rows && m[1:4]["n"] == [3, 1, 2, 0]
+
+    @test_throws ArgumentError HuggingFaceDatasets.RaggedVector(UInt16[1, 2], Int32[0, 1])
+    @test_throws ArgumentError HuggingFaceDatasets.RaggedVector(UInt16[], Int32[])
+    @test_throws ArgumentError HuggingFaceDatasets.RaggedVector(UInt16[1, 2], [0, 2, 1, 2])
+end
+
+@testset "batch iterator (#105, #107)" begin
+    ds = Dataset((; text = ["a", "bb", "ccc", "dddd", "e"], n = Int32[1, 2, 3, 4, 5]))
+
+    # "julia" format: what indexing with a range returns
+    it = ds.iter(batch_size = 2)
+    @test it isa HuggingFaceDatasets.BatchIterator
+    @test Base.IteratorSize(it) == Base.HasLength() && length(it) == 3
+    batches = collect(it)
+    @test batches == [ds[1:2], ds[3:4], ds[5:5]]
+    @test batches[1]["text"] isa Vector{String} && batches[1]["n"] isa Vector{Int32}
+    @test collect(it) == batches                                   # iterable again
+    @test collect(ds.iter(2)) == batches                           # positional batch size
+    @test length(ds.iter(batch_size = 2, drop_last_batch = true)) == 2
+    @test collect(ds.iter(batch_size = 2, drop_last_batch = true)) == batches[1:2]
+    @test length(ds.iter(batch_size = 5)) == 1
+    @test [b["text"] for b in ds.select_columns("text").iter(batch_size = 3)] ==
+          [["a", "bb", "ccc"], ["dddd", "e"]]
+    @test_throws ArgumentError ds.iter(batch_size = 0)
+
+    # a custom transform gets each Python batch
+    tr = with_jltransform(ds, b -> pyconvert(Vector{String}, b["text"]))
+    @test collect(tr.iter(batch_size = 3)) == [["a", "bb", "ccc"], ["dddd", "e"]]
+
+    # a Python transform's batch that `py2jl` wraps rather than copies stays valid
+    userdict = @pyeval("lambda b: __import__('collections').UserDict(b)")
+    pt = collect(ds.with_transform(userdict).iter(batch_size = 2))
+    @test pyconvert(Vector{String}, pt[1]["text"]) == ["a", "bb"]
+
+    # iterating on from an exhausted state
+    it = ds.iter(batch_size = 5)
+    b, state = iterate(it)
+    @test iterate(it, state) === nothing && iterate(it, state) === nothing
+
+    # Python formats: a `PyBatch`, released with its columns when the iterator advances
+    raw = with_format(ds, nothing)
+    it = raw.iter(batch_size = 2)
+    b, state = iterate(it)
+    @test b isa HuggingFaceDatasets.PyBatch
+    @test keys(b) == ["text", "n"]
+    text = b["text"]
+    @test pyconvert(Vector{String}, text) == ["a", "bb"]
+    @test pyconvert(Vector{String}, Py(b)["text"]) == ["a", "bb"]  # `Py(b)` is the Python batch
+    @test py2jl(b) == Dict("text" => ["a", "bb"], "n" => [1, 2])
+    kept = copy(b)
+    a = numpy2jl(with_format(ds, "numpy").py[pyslice(0, 2)]["n"])
+    b2, state = iterate(it, state)
+    @test pyis(text, pybuiltins.None)
+    @test_throws ArgumentError b["text"]
+    @test_throws ArgumentError Py(b)
+    @test sprint(show, b) == "PyBatch(released)"
+    @test pyconvert(Vector{String}, kept["text"]) == ["a", "bb"]
+    @test pyconvert(Vector{String}, b2["text"]) == ["ccc", "dddd"]
+    @test a == [1, 2]
+    @test [pyconvert(Vector{Int}, b["n"]) for b in with_format(ds, "numpy").iter(batch_size = 3)] ==
+          [[1, 2, 3], [4, 5]]
+
+    # a `PyBatch` iterates like a `Dict`
+    @test length(b2) == 2 && haskey(b2, "n") && !haskey(b2, "x")
+    @test [k for (k, v) in b2] == ["text", "n"]
+    @test pyconvert(Vector{Int}, Dict(b2)["n"]) == [3, 4]
+
+    # `release = false` leaves the batches to the GC
+    kept = collect(raw.iter(batch_size = 2, release = false))
+    @test [pyconvert(Vector{String}, b["text"]) for b in kept] == [["a", "bb"], ["ccc", "dddd"], ["e"]]
+    s = Iterators.Stateful(raw.iter(batch_size = 2, release = false))
+    @test pyconvert(Vector{String}, popfirst!(s)["text"]) == ["a", "bb"]
 end
 
 @testset "python transforms" begin

@@ -6,6 +6,7 @@
 import numpy as np
 import pyarrow as pa
 from datasets import Value
+from datasets.features.features import require_decoding
 from datasets.formatting import NumpyFormatter, _register_formatter
 
 
@@ -15,9 +16,53 @@ def _strings(column):
     return column.to_numpy(zero_copy_only=False)
 
 
+def _first_string(column):
+    return column[0].as_py()
+
+
+class RaggedArray(np.ndarray):
+    """The rows of a list column of numbers, as `NumpyFormatter` returns them (an object array
+    of 1-D arrays), that also holds them as one flat `values` array and int64 `offsets` (row `i`
+    is `values[offsets[i]:offsets[i + 1]]`), which HuggingFaceDatasets.jl reads instead.
+
+    Arrays derived from it (slices, copies, unpickled ones) have `values = offsets = None`.
+    """
+
+    def __array_finalize__(self, obj):
+        self.values = None
+        self.offsets = None
+
+
+def _is_numeric_list(column):
+    # A non-empty list column of numbers without nulls, at either level.
+    return (
+        (pa.types.is_list(column.type) or pa.types.is_large_list(column.type))
+        and (pa.types.is_integer(column.type.value_type) or pa.types.is_floating(column.type.value_type))
+        and len(column) > 0
+        and column.null_count == 0
+        and all(chunk.flatten().null_count == 0 for chunk in column.chunks)
+    )
+
+
+def _numeric_lists(column):
+    # What `NumpyFormatter` returns, built from Arrow's flat buffers: a 2-D array if all rows
+    # have the same length, a `RaggedArray` otherwise. Chunk by chunk, since combining them would
+    # overflow the int32 offsets of a `list` column past 2^31 values. `values` is a new, writable
+    # array, which Julia shares.
+    values = np.concatenate([chunk.flatten().to_numpy() for chunk in column.chunks])
+    lengths = np.concatenate([np.diff(chunk.offsets.to_numpy()) for chunk in column.chunks])
+    if (lengths == lengths[0]).all():
+        return values.reshape(len(lengths), lengths[0])
+    rows = np.concatenate([chunk.to_numpy(zero_copy_only=False) for chunk in column.chunks])
+    rows = rows.view(RaggedArray)
+    rows.values = values
+    rows.offsets = np.concatenate([[0], np.cumsum(lengths, dtype=np.int64)])
+    return rows
+
+
 class JuliaFormatter(NumpyFormatter):
-    """`NumpyFormatter` that keeps each column's Arrow dtype, and reads string columns as
-    object arrays of `str`.
+    """`NumpyFormatter` that keeps each column's Arrow dtype, reads string columns as object
+    arrays of `str`, and gives a batch of a list column of numbers its flat Arrow buffers.
 
     `NumpyFormatter` casts integer arrays to int64 and float arrays to float32 unless the format
     kwargs set a `dtype`; `dtype=None` keeps the dtype that numpy gets from Arrow.
@@ -38,36 +83,47 @@ class JuliaFormatter(NumpyFormatter):
             return np.stack(column)
         return super()._consolidate(column)
 
-    def _string_columns(self, pa_table):
-        # Top-level `Value("string")` columns: nothing to decode or tensorize.
-        return {
-            field.name
-            for field in pa_table.schema
-            if (pa.types.is_string(field.type) or pa.types.is_large_string(field.type))
-            and (not self.features or isinstance(self.features.get(field.name), Value))
-        }
+    def _extractors(self, pa_table, batch):
+        # The columns read straight from Arrow, with their extractor: top-level
+        # `Value("string")` columns, and in a batch, list columns of numbers. Neither needs
+        # decoding.
+        extractors = {}
+        for field in pa_table.schema:
+            feature = self.features.get(field.name) if self.features else None
+            if pa.types.is_string(field.type) or pa.types.is_large_string(field.type):
+                if not self.features or isinstance(feature, Value):
+                    extractors[field.name] = _strings if batch else _first_string
+            elif (
+                batch
+                and self.np_array_kwargs.get("dtype") is None
+                and (feature is None or not require_decoding(feature))
+                and _is_numeric_list(pa_table.column(field.name))
+            ):
+                extractors[field.name] = _numeric_lists
+        return extractors
 
-    def _format_split(self, pa_table, format_rest, extract_string):
-        names = self._string_columns(pa_table)
-        if not names:
+    def _format_split(self, pa_table, format_rest, batch):
+        extractors = self._extractors(pa_table, batch)
+        if not extractors:
             return format_rest(pa_table)
-        rest = pa_table.select([name for name in pa_table.column_names if name not in names])
+        rest = pa_table.select([name for name in pa_table.column_names if name not in extractors])
         out = format_rest(rest) if rest.num_columns else {}
         return {
-            name: extract_string(pa_table.column(name)) if name in names else out[name]
+            name: extractors[name](pa_table.column(name)) if name in extractors else out[name]
             for name in pa_table.column_names
         }
 
     def format_row(self, pa_table):
-        return self._format_split(pa_table, super().format_row, lambda column: column[0].as_py())
+        return self._format_split(pa_table, super().format_row, batch=False)
 
     def format_column(self, pa_table):
-        if self._string_columns(pa_table):
-            return _strings(pa_table.column(0))
+        extractors = self._extractors(pa_table, batch=True)
+        if extractors:
+            return extractors[pa_table.column_names[0]](pa_table.column(0))
         return super().format_column(pa_table)
 
     def format_batch(self, pa_table):
-        return self._format_split(pa_table, super().format_batch, _strings)
+        return self._format_split(pa_table, super().format_batch, batch=True)
 
 
 class JuliaFormatType(str):

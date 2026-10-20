@@ -44,6 +44,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stay on Julia's fast paths (BLAS, GPU copies). Functions that rely on the `PyDict`/`PyArray` API
   (e.g. calling `pyconvert` on a value) need updating, or can keep it through the raw Python
   method, `ds.py.map(f)`.
+- `ds.iter(; batch_size, drop_last_batch = false)` on a `Dataset` or `IterableDataset` returns
+  a `BatchIterator` whose batches are in the dataset's format, as indexing with a range returns
+  them: a `Dict{String}` of Julia columns in the `"julia"` format (e.g. a `Vector{String}` for a
+  text column), instead of PythonCall's `PyDict`s of `PyArray`s (#105). It is the fast way to
+  stream a dataset in batches; for a `Dataset` it has a `length`. Each Python batch is released as
+  soon as it is converted. In a Python format (`nothing`, `"numpy"`, ...) it yields `PyBatch`es,
+  which are released along with the columns taken from them when the iterator advances, so a loop
+  over a stream holds one batch of Python memory at a time instead of every batch until Julia's GC
+  runs (#107); `copy` or `py2jl` a batch to keep it, or pass `release = false`.
+- A batch of a list column of numbers whose rows have different lengths (e.g. token ids) is read
+  in the `"julia"` format as a `RaggedVector`, a vector of views into one flat buffer of the
+  batch's values (`r.values`, with 0-based `r.offsets`), instead of a `Vector{Vector{T}}` built
+  from one numpy array per row (#108). Reading 10 000 rows of ~1000 `uint16` ids takes 3 ms
+  instead of 0.2 s. Rows of equal length are still stacked into a matrix, columns with nulls are
+  read as before, and `collect` on the column's `Column` still returns a `Vector{Vector{T}}`.
+  Python functions given to `ds.py.map` still see an `object` array of 1-D arrays.
 
 ### Added
 - `MLUtils.DataLoader(ds::Dataset; num_workers=N)` works out of the box for process-parallel
@@ -52,11 +68,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pickle` on the main task and loading this package on the workers — is handled upstream by
   MLUtils, so no wrapper type is exported here. An `@info` notes when an in-memory dataset is
   first materialized to a temporary Arrow file for this. Requires MLUtils ≥ 0.4.11.
+- `py2jl` converts PythonCall's `PyDict`, `PyList`, `PySet` and `PyArray` like the Python object
+  they wrap, instead of returning them unchanged.
 - `Dataset(::AbstractDict)`, `Dataset(::NamedTuple)` and the Tables.jl constructor accept the
   `features`, `info` and `split` keywords of `datasets.Dataset.from_dict`, e.g.
   `Dataset(data; features = ds.features)` (#92).
 
 ### Fixed
+- Two arrays returned by `numpy2jl` (or read under the `"julia"` format) with equal contents, e.g.
+  the same rows read twice, no longer share one root for their numpy buffers, which left the first
+  one reading freed memory and could crash Julia (#106). On Julia ≥ 1.11, an array obtained by
+  `reshape` or `vec` of such an array also keeps the buffer alive after the original array is
+  collected.
+- Julia's GC doesn't count the numpy memory that `numpy2jl` arrays share, so a loop that read
+  numeric batches and allocated little else could keep all of them in memory (1.5 GB for 40
+  batches of 40 MB). `numpy2jl` now runs the GC once the memory it wraps has grown past 256 MiB
+  and twice what was live after the previous collection, and releases a collected array's numpy
+  buffer at the next conversion (#107).
 - A Julia function passed to `map` that returns numeric vectors (e.g. a `Vector{UInt16}` of
   token ids per row) now produces a column of the same element type (`uint16`) instead of
   `int64`/`float64`, which stored up to 4× the data. (#80)

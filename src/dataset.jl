@@ -223,6 +223,8 @@ function _method_override(ds::Dataset, s::Symbol)
         return (f; kws...) -> filter(f, ds; kws...)
     elseif s === :save_to_disk
         return (args...; kws...) -> _save_to_disk(getfield(ds, :py), args...; kws...)
+    elseif s === :iter
+        return (args...; kws...) -> _batch_iterator(ds, args...; kws...)
     else
         return nothing
     end

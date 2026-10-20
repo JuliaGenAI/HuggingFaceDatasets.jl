@@ -328,6 +328,29 @@ The order of operations when you index is:
 data with the original but has an independent format, so setting a format or transform on
 the copy does not affect the original.
 
+### Iterating in batches
+
+`ds.iter(; batch_size, drop_last_batch = false)` reads a [`Dataset`](@ref) or an
+[`IterableDataset`](@ref) in consecutive batches, through `datasets`' own `iter`. It is the
+fast way to stream a dataset: converting one batch costs far less than converting its rows
+one at a time. Each batch is what indexing with a range returns:
+
+```jldoctest guide
+julia> ds = Dataset((; text = ["a", "bb", "ccc"], n = Int32[1, 2, 3]));
+
+julia> [b["text"] for b in ds.iter(batch_size = 2)]
+2-element Vector{Vector{String}}:
+ ["a", "bb"]
+ ["ccc"]
+```
+
+Each Python batch is released as soon as it is converted. In a Python format (e.g.
+`with_format(ds, nothing)`), the iterator yields a [`PyBatch`](@ref) instead, whose
+columns are `Py` objects, e.g. to pass to a Python tokenizer. It is released, along with
+the columns taken from it, when the iterator advances, so that a long stream doesn't
+accumulate Python memory that Julia's GC doesn't see. `copy` or [`py2jl`](@ref) a batch to
+keep it.
+
 ## Transforming with `map` and `filter`
 
 `map` and `filter` are the core `datasets` verbs for building a new dataset from an
@@ -464,6 +487,22 @@ julia> ds[1:2]["x"]                   # a batch stacks along the last axis
 [:, :, 2] =
   7   8   9
  10  11  12
+```
+
+A list column of numbers whose rows have different lengths, such as the token ids of a
+tokenized text column, can't be stacked. A batch of it is a [`RaggedVector`](@ref): a
+vector of views into one flat buffer of all the batch's values, read from Arrow in one go.
+
+```jldoctest guide
+julia> ds = Dataset((; ids = [UInt16[1, 2, 3], UInt16[4]]));
+
+julia> ids = ds[1:2]["ids"];
+
+julia> ids == [[1, 2, 3], [4]]
+true
+
+julia> ids.values, ids.offsets          # all the values, and where each row starts
+(UInt16[0x0001, 0x0002, 0x0003, 0x0004], [0, 3, 4])
 ```
 
 To recover the Python orientation of a single array, reverse the axes with `permutedims`:

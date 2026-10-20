@@ -16,6 +16,9 @@ DatasetDict
 IterableDataset
 IterableDatasetDict
 Column
+BatchIterator
+PyBatch
+RaggedVector
 ```
 
 ## Schema (features)

@@ -25,6 +25,9 @@ julia> py2jl(pytuple((1, pylist([2, 3]))))
 """
 py2jl(x) = pyconvert(Any, x)
 
+# PythonCall's wrappers convert like the Python object they wrap.
+py2jl(x::Union{PyArray, PyDict, PyList, PySet}) = py2jl(Py(x))
+
 # Whether a numpy array's dtype is one `numpy2jl` can share zero-copy: bool,
 # signed/unsigned integer, float, or complex. Strings/objects/datetimes are excluded.
 _is_numeric_dtype(x::Py) = pyconvert(String, x.dtype.kind) in ("b", "i", "u", "f", "c")
@@ -69,6 +72,10 @@ function py2jl(x::Py)
         # conversion, so a string column still comes back as a `Vector{String}`.
         elseif _is_numeric_dtype(x)
             return numpy2jl(x)
+        # A list column of numbers from the "julia" formatter, which also holds the rows as one
+        # flat buffer: two zero-copy conversions instead of one per row.
+        elseif pyisinstance(x, pyhfds.RaggedArray) && !pyis(x.values, pybuiltins.None)
+            return RaggedVector(numpy2jl(x.values), numpy2jl(x.offsets))
         else
             return py2jl(x.tolist())
         end
@@ -100,16 +107,89 @@ function py2jl(x::Py)
 end
 
 
-# Roots the Python buffer backing each zero-copy `numpy2jl` array for exactly as long as the
-# Julia `Array` that views it. The wrapper `Array` is the (weak) key, so an entry — and the
-# Python reference it holds — is dropped automatically once that array is garbage-collected;
-# `WeakKeyDict` is internally locked, so concurrent inserts/evictions are thread-safe.
+# Roots the numpy array behind each zero-copy `numpy2jl` result for as long as Julia memory
+# views it. Entries are matched by identity, never by content (#106), and owned by the array's
+# `Memory` on Julia ≥ 1.11, which `reshape`/`vec` of the array share without referencing the
+# array itself. As in a `WeakKeyDict`, the owner's finalizer only marks the table dirty, and the
+# next `numpy2jl` call drops the dead entries, releasing their numpy arrays then and there.
 #
-# Cleanup routes through PythonCall's GIL-deferred decref (a finalizer that can't take the GIL
-# just enqueues the pointer), so — unlike DLPack's finalizer, which eagerly re-acquires the GIL
-# — a buffer freed on a `DataLoader` worker thread can never deadlock against a thread compiling
-# under the GIL.
-const _NUMPY_BUFFERS = WeakKeyDict{AbstractArray,Any}()
+# The GC doesn't count the wrapped memory, so a loop whose only allocations are such arrays would
+# keep every one alive (#107). Once the rooted bytes reach twice what was live after the last
+# collection that `numpy2jl` ran (and at least `_NUMPY_GC_BYTES`), it runs a young collection,
+# and a full one if that doesn't free half of them.
+mutable struct NumpyRoots
+    const lock::ReentrantLock
+    const owners::Vector{WeakRef}
+    const arrays::Vector{Py}
+    const sizes::Vector{Int}
+    bytes::Int
+    gc_bytes::Int
+    @atomic dirty::Bool
+end
+
+const _NUMPY_GC_BYTES = 256 * 2^20
+
+const _NUMPY_ROOTS = NumpyRoots(ReentrantLock(), WeakRef[], Py[], Int[], 0, _NUMPY_GC_BYTES, false)
+
+_buffer_owner(a::Array) = @static VERSION >= v"1.11" ? a.ref.mem : a
+
+_mark_dirty(_) = (@atomic _NUMPY_ROOTS.dirty = true; nothing)
+
+# Drops the entries whose owner was collected, returning their numpy arrays for the caller to
+# release outside the lock. Call with `r.lock` held. `force` scans even if no owner's finalizer
+# ran, as when the caller of a collection holds a lock, which disables finalizers.
+function _purge!(r::NumpyRoots; force::Bool = false)
+    dead = Py[]
+    force || (@atomic r.dirty) || return dead
+    @atomic r.dirty = false
+    j = 0
+    for i in eachindex(r.owners)
+        if r.owners[i].value === nothing
+            push!(dead, r.arrays[i])
+            r.bytes -= r.sizes[i]
+        else
+            j += 1
+            r.owners[j], r.arrays[j], r.sizes[j] = r.owners[i], r.arrays[i], r.sizes[i]
+        end
+    end
+    resize!(r.owners, j); resize!(r.arrays, j); resize!(r.sizes, j)
+    # Only lowered here: after a young collection, `bytes` can include arrays that survived an
+    # earlier one and are dead, which only a full collection frees.
+    r.gc_bytes = min(r.gc_bytes, max(_NUMPY_GC_BYTES, 2 * r.bytes))
+    return dead
+end
+
+function _purge_and_release!(r::NumpyRoots)
+    foreach(PythonCall.pydel!, @lock r.lock _purge!(r; force = true))
+end
+
+function _root!(owner, x::Py, nbytes::Int)
+    r = _NUMPY_ROOTS
+    finalizer(_mark_dirty, owner)
+    dead, over = @lock r.lock begin
+        dead = _purge!(r)
+        push!(r.owners, WeakRef(owner))
+        push!(r.arrays, PythonCall.pynew(x))
+        push!(r.sizes, nbytes)
+        r.bytes += nbytes
+        dead, r.bytes > r.gc_bytes
+    end
+    foreach(PythonCall.pydel!, dead)
+    over && _collect_numpy!(r)
+    return nothing
+end
+
+function _collect_numpy!(r::NumpyRoots)
+    trigger = r.gc_bytes
+    GC.gc(false)
+    _purge_and_release!(r)
+    if r.bytes > trigger ÷ 2
+        GC.gc(true)
+        _purge_and_release!(r)
+    end
+    @lock r.lock r.gc_bytes = max(_NUMPY_GC_BYTES, 2 * r.bytes)
+    return nothing
+end
 
 """
     numpy2jl(x)
@@ -143,14 +223,13 @@ function numpy2jl(x::Py)
     if !pyconvert(Bool, x.flags.c_contiguous) || !pyconvert(Bool, x.flags.writeable)
         x = x.copy()
     end
-    # `PyArray(x.T)` is a zero-copy view with reversed axes; it holds the Python reference that
-    # keeps the buffer alive. `unsafe_wrap` then exposes that same memory as a genuine `Array`, so
-    # the result stays on Julia's fast paths (BLAS, GPU host→device copies, linear indexing) that
-    # a `PyArray` — not being a `DenseArray` — would miss. `_NUMPY_BUFFERS` roots the `PyArray` for
-    # the wrapper's lifetime so the buffer outlives every view of it.
+    # `PyArray(x.T)` is a zero-copy view with reversed axes. `unsafe_wrap` then exposes that same
+    # memory as a genuine `Array`, so the result stays on Julia's fast paths (BLAS, GPU host→device
+    # copies, linear indexing) that a `PyArray` — not being a `DenseArray` — would miss.
+    # `_NUMPY_ROOTS` keeps `x` alive while any Julia view of its memory is.
     p = PyArray(x.T)
     arr = unsafe_wrap(Array, pointer(p), size(p); own = false)
-    _NUMPY_BUFFERS[arr] = p
+    _root!(_buffer_owner(arr), x, sizeof(arr))
     return arr
 end
 
