@@ -198,6 +198,10 @@ end
         @test string(ds.py.split) == "validation"
         @test Dataset(blocks; fingerprint = "blocks-v1", cache_dir = dir, split = "validation").cache_files ==
               ds.cache_files
+        # Python's `from_generator` shares the cache of the same `fingerprint`
+        boom = pyeval("lambda: (_ for _ in ()).throw(RuntimeError('iterated'))", @__MODULE__)
+        py = datasets.Dataset.from_generator(boom; fingerprint = "blocks-v1", cache_dir = dir, split = "validation")
+        @test pyconvert(String, py.cache_files[0]["filename"]) == ds.cache_files[1]["filename"]
         @test_throws ArgumentError Dataset(blocks; num_proc = 2)
 
         gen = pyeval("lambda: iter([{'x': 1}, {'x': 2}])", @__MODULE__)

@@ -117,7 +117,8 @@ julia> ds[1:32]["ids"];   # a 513×32 Matrix{UInt16}
 
 A stream can't be fingerprinted, so without `fingerprint` it is rebuilt on every call, in a
 temporary directory. With one, a later call, also in a new session, loads the cached dataset
-without streaming. A Julia iterable of examples (`Dict`s or `NamedTuple`s), or a function
+without streaming, as does Python's `Dataset.from_generator` with the same `fingerprint`,
+`cache_dir` and `split`. A Julia iterable of examples (`Dict`s or `NamedTuple`s), or a function
 returning one, is cached under a fingerprint of its content, as the function of `map` is. With
 `batched = true` it yields batches of columns, which convert faster:
 
