@@ -85,12 +85,10 @@ Base.show(io::IO, d::IterableDatasetDict) = print(io, getfield(d, :py))
 Base.show(io::IO, ::MIME"text/plain", d::IterableDatasetDict) = print(io, getfield(d, :py))
 
 """
-    d.map(f; kws...)
     map(f, d::IterableDatasetDict; kws...)
 
-Lazily apply `f` to every example of every split, bridging Julia values on both sides like
-[`ds.map`](@ref map(f, ::IterableDataset)) on an `IterableDataset`. The two forms are
-equivalent.
+Lazily apply `f` to every example of every split, bridging Julia values on both sides like the
+[`IterableDataset`](@ref) version. `d.map(f; ...)` is equivalent to this `map(f, d; ...)`.
 """
 function Base.map(f, d::IterableDatasetDict; kws...)
     y = getfield(d, :py).map(_pycallback(f); kws...)
@@ -98,13 +96,11 @@ function Base.map(f, d::IterableDatasetDict; kws...)
 end
 
 """
-    d.filter(f; kws...)
     filter(f, d::IterableDatasetDict; kws...)
 
 Lazily filter every split by the Julia predicate `f`, applied per example, bridging values with
-[`py2jl`](@ref)/[`jl2py`](@ref). Like [`d.filter`](@ref filter(f, ::DatasetDict)) on a
-`DatasetDict`, this filters *examples* within every split (matching Python), not split entries.
-The two forms are equivalent.
+[`py2jl`](@ref)/[`jl2py`](@ref). Like [`DatasetDict`](@ref)'s `filter`, this filters *examples*
+within every split (matching Python), not split entries.
 """
 function Base.filter(f, d::IterableDatasetDict; kws...)
     y = getfield(d, :py).filter(_pycallback(f); kws...)

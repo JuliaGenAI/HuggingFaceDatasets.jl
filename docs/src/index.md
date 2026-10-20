@@ -18,7 +18,7 @@ package makes available to the Julia ecosystem.
 The package wraps the Python `datasets.Dataset` and `datasets.DatasetDict` types and:
 
 - forwards every method of the underlying Python object, so the full `datasets` API
-  (`ds.map`, `ds.filter`, `ds.shuffle`, `ds.train_test_split`, `ds.cast_column`, …) is available;
+  (`map`, `filter`, `shuffle`, `train_test_split`, `cast_column`, …) is available;
 - uses 1-based indexing, Julia iteration, and other Julia conventions;
 - returns observations in a lazy `"julia"` format by default, converting them to native
   Julia types (numeric N-D arrays, dictionaries, ...) on access, copylessly when possible,

@@ -94,19 +94,18 @@ values (see below).
 
 ### Materializing a stream or a Julia generator
 
-With `streaming=true`, `load_dataset` returns an [`IterableDataset`](@ref) `stream`, whose
-`stream.map` and `stream.filter` are lazy: they run again on every pass and are never written to
-disk.
+With `streaming=true`, `load_dataset` returns an [`IterableDataset`](@ref), whose `map` and
+`filter` are lazy: they run again on every pass and are never written to disk.
 [`from_generator`](@ref) (`Dataset.from_generator`, or `Dataset(stream)` for a stream) writes the
 examples of a stream, or of a Julia iterable, to an Arrow file in the cache and returns the
 memory-mapped [`Dataset`](@ref). This keeps only the result of a pipeline: tokenizing a corpus
 streamed from the Hub stores the token ids, without the parquet files and the Arrow copy of the
-text that a non-streaming `load_dataset` followed by `ds.map` keeps.
+text that a non-streaming `load_dataset` followed by `map` keeps.
 
 ```julia-repl
 julia> stream = load_dataset("roneneldan/TinyStories"; split = "validation", streaming = true);
 
-julia> blocks = stream.map(; batched = true, remove_columns = ["text"]) do b
+julia> blocks = map(stream; batched = true, remove_columns = ["text"]) do b
            ids = tokenize(b["text"])                                # a Vector{UInt16}
            Dict("ids" => reshape(ids[1:end ÷ 513 * 513], 513, :))   # blocks of 513 ids
        end;
@@ -119,7 +118,7 @@ julia> ds[1:32]["ids"];   # a 513×32 Matrix{UInt16}
 A stream can't be fingerprinted, so without `fingerprint` it is rebuilt on every call, in a
 temporary directory. With one, a later call, also in a new session, loads the cached dataset
 without streaming. A Julia iterable of examples (`Dict`s or `NamedTuple`s), or a function
-returning one, is cached under a fingerprint of its content, as the function of `ds.map` is. With
+returning one, is cached under a fingerprint of its content, as the function of `map` is. With
 `batched = true` it yields batches of columns, which convert faster:
 
 ```julia-repl
@@ -162,11 +161,11 @@ DatasetDict({
 ```
 
 Keyword arguments are forwarded as Python keyword arguments, so calls like
-`ds.train_test_split(test_size=0.5)` and `ds.shuffle(seed=0)` behave exactly as in Python.
+`train_test_split(test_size=0.5)` and `shuffle(seed=0)` behave exactly as in Python.
 
 !!! note "0-based method arguments"
     Methods forwarded to Python keep Python semantics, including **0-based indices**
-    (e.g. the argument to `ds.select` above). Only the wrapper's own `getindex`/iteration
+    (e.g. the argument to `select` above). Only the wrapper's own `getindex`/iteration
     interface is 1-based. Consult the
     [`datasets` documentation](https://huggingface.co/docs/datasets) for the exact
     meaning of each method's arguments.
@@ -391,11 +390,11 @@ the columns taken from it, when the iterator advances, so that a long stream doe
 accumulate Python memory that Julia's GC doesn't see. `copy` or [`py2jl`](@ref) a batch to
 keep it.
 
-## Transforming with `ds.map` and `ds.filter`
+## Transforming with `map` and `filter`
 
-`ds.map` and `ds.filter` are the core `datasets` verbs for building a new dataset from an
-existing one. [`ds.map(f)`](@ref map(f, ::Dataset)) / [`ds.filter(f)`](@ref filter(f, ::Dataset))
-bridge the callback for you: each example (or batch, with `batched=true`) is converted with
+`map` and `filter` are the core `datasets` verbs for building a new dataset from an
+existing one. The overloads [`map(f, ds)`](@ref) / [`filter(f, ds)`](@ref) bridge the
+callback for you: each example (or batch, with `batched=true`) is converted with
 [`py2jl`](@ref) before `f` sees it, and `f`'s Julia return value is converted back to
 Python with [`jl2py`](@ref) (the write-path dual of `py2jl`). Under the `"julia"` format, `f`
 sees what indexing returns: a `Dict` of Julia `Array`s (of each column's element type),
@@ -405,7 +404,7 @@ sees what indexing returns: a `Dict` of Julia `Array`s (of each column's element
 ```julia-repl
 julia> ds = Dataset((; label=[5, 0, 4]));
 
-julia> ds2 = ds.map(x -> Dict("label" => x["label"] .+ 100); batched=true);
+julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);
 
 julia> ds2[1:3]["label"]
 3-element Vector{Int64}:
@@ -413,7 +412,7 @@ julia> ds2[1:3]["label"]
  100
  104
 
-julia> ds3 = ds.filter(x -> x["label"] > 2);   # keep rows with label > 2
+julia> ds3 = filter(x -> x["label"] > 2, ds);   # keep rows with label > 2
 
 julia> ds3[:]["label"]
 2-element Vector{Int64}:
@@ -421,17 +420,18 @@ julia> ds3[:]["label"]
  4
 ```
 
-These are also methods of `Base.map` and `Base.filter`: `ds.map(f)` is `map(f, ds)`, and
-`ds.filter(f)` is `filter(f, ds)`. A [`DatasetDict`](@ref) behaves the same way: `dd.map(f)`
-and `dd.filter(f)` apply `f` per example across every split (so `dd.filter(f)`, like
-`filter(f, dd)`, filters *examples*, not split entries).
+The property-style calls `ds.map(f)` / `ds.filter(f)` are **equivalent** to `map(f, ds)` /
+`filter(f, ds)` — they route to these same overloads, so the callback still sees Julia values.
+A [`DatasetDict`](@ref) behaves the same way: `map(f, dd)` / `dd.map(f)` and `filter(f, dd)` /
+`dd.filter(f)` apply `f` per example across every split (note this makes `filter(f, dd)` filter
+*examples*, not split entries).
 
 A few things to note:
 
 - **Batched or not.** Without `batched=true` the callback sees one example at a time (a
   `Dict` of scalar values, or whatever `py2jl` returns); with `batched=true` it sees a
   batch (a `Dict` mapping each column to a vector). Return the same shape: a scalar
-  (`ds.map`) / `Bool` (`ds.filter`) per example, or a vector per column / `Vector{Bool}` when
+  (`map`) / `Bool` (`filter`) per example, or a vector per column / `Vector{Bool}` when
   batched.
 - **Element types are kept.** A number or numeric vector returned by the callback is stored
   with its element type, so e.g. a `Float32` becomes a `float32` column and `Vector{UInt16}`
@@ -439,7 +439,7 @@ A few things to note:
 - **Keyword arguments** such as `batched`, `batch_size`, and `remove_columns` are forwarded
   to the Python method.
 - **Caching follows the code.** On a dataset backed by files (from `load_dataset`,
-  `load_from_disk`, ...), `datasets` caches the result of `ds.map`/`ds.filter` and reuses it when
+  `load_from_disk`, ...), `datasets` caches the result of `map`/`filter` and reuses it when
   the same transform runs again, also in a later session, so rerunning a script skips an
   expensive `tokenize` step. `datasets` recognizes a transform by a fingerprint, which it
   computes for a Python function by pickling its code and the values it uses. A Julia function
@@ -462,11 +462,11 @@ A few things to note:
   ```
 
   Cache files accumulate next to the dataset's files: `ds.cleanup_cache_files()` deletes those
-  `ds` doesn't use, including those behind datasets an earlier `ds.map` returned, and
+  `ds` doesn't use, including those behind datasets an earlier `map` returned, and
   `datasets.disable_caching()` writes them to a temporary directory instead.
 - **No `num_proc` with a Julia function.** `datasets` runs `num_proc ≥ 1` in a pool of
   forked worker processes, and those cannot call back into Julia (the workers die or hang),
-  so `ds.map`/`ds.filter` throw an `ArgumentError` for it instead (`num_proc=nothing` or `0` run
+  so `map`/`filter` throw an `ArgumentError` for it instead (`num_proc=nothing` or `0` run
   in-process and are fine). Two ways to parallelize:
   - pass `batched=true` and parallelize over the batch inside the Julia function, e.g. with
     `Threads.@threads` (start Julia with several threads, `julia -t auto`);
@@ -486,8 +486,8 @@ A few things to note:
     ```
 - **Format is preserved.** The returned `Dataset` inherits the parent's `"julia"` format
   (or any custom `jltransform`), so `ds2` above is still `"julia"`-formatted and a chained
-  pipeline like `ds.map(f).filter(g)` keeps returning Julia values.
-- **Raw Python callbacks.** To hand `ds.map`/`ds.filter` a callback written in "PythonCall
+  pipeline like `map(f, dsj) |> ...` keeps returning Julia values.
+- **Raw Python callbacks.** To hand `map`/`filter` a callback written in "PythonCall
   dialect" (receiving raw `Py` rows/batches, `pyconvert` in, `pylist`/`pydict` out), reach
   for the underlying Python method with `ds.py.map(...)` / `ds.py.filter(...)`:
 

@@ -291,8 +291,7 @@ Unlike `jl2numpy`, which shares memory, `jl2py` copies numeric vectors and multi
 arrays, so mutating them afterwards does not affect the result.
 
 This is the write-path dual of `py2jl`, used to bridge pure-Julia callbacks into the
-Python `datasets` API (see [`ds.map`](@ref map(f, ::Dataset)) /
-[`ds.filter`](@ref filter(f, ::Dataset))).
+Python `datasets` API (see the Julia-friendly [`map`](@ref) / [`filter`](@ref) overloads).
 
 # Examples
 

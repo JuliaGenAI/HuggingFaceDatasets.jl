@@ -318,10 +318,9 @@ function Base.getindex(ds::Dataset, i::AbstractString)
 end
 
 """
-    ds.map(f; kws...)
     map(f, ds::Dataset; kws...)
 
-Apply `f` to `ds` through `datasets.Dataset.map`, bridging Julia values on both sides: each
+Apply `f` to `ds` through `datasets`' `map`, bridging Julia values on both sides: each
 example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees
 it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). This lets you
 write pure-Julia transforms while still getting `datasets`' batching and caching (see below).
@@ -331,12 +330,12 @@ values, with numeric columns as `Array`s of the column's element type (not Pytho
 `PyDict`/`PyArray`). Extra arguments from `datasets` (the 0-based row indices with
 `with_indices=true`, `fn_kwargs`, ...) are converted with `py2jl` as well.
 
-Keyword arguments (`batched`, `batch_size`, `remove_columns`, ...) are forwarded to
-`datasets.Dataset.map`. The parent's julia format/transform is preserved on the returned
-`Dataset`.
+Keyword arguments (`batched`, `batch_size`, `remove_columns`, ...) are forwarded to the
+Python `map`. The parent's julia format/transform is preserved on the returned `Dataset`.
 
-The two forms are equivalent (the property call routes here, not to Python). A Python
-callable `f` is handed to Python as is, like the underlying `ds.py.map(...)` does.
+`ds.map(f; ...)` is equivalent to this `map(f, ds; ...)` (the property call routes here, not
+to Python). A Python callable `f` is handed to Python as is, like the underlying
+`ds.py.map(...)` does.
 
 !!! note "Caching"
     For a dataset backed by files (from `load_dataset`, `load_from_disk`, ...), `datasets`
@@ -354,7 +353,7 @@ callable `f` is handed to Python as is, like the underlying `ds.py.map(...)` doe
     object `datasets` can't pickle, ...), it is recomputed on every call. Pass a
     `new_fingerprint` string to set the fingerprint yourself, or `load_from_cache_file=false` to
     recompute. `ds.cleanup_cache_files()` deletes the cache files that `ds` doesn't use,
-    including those of the datasets `ds.map` returned; `datasets.disable_caching()` writes them to
+    including those of the datasets `map` returned; `datasets.disable_caching()` writes them to
     a temporary directory instead. An existing `cache_file_name` is loaded as is, unless
     `load_from_cache_file=false`.
 
@@ -366,14 +365,14 @@ callable `f` is handed to Python as is, like the underlying `ds.py.map(...)` doe
     `Threads.@threads`), or call the underlying Python method with a function *defined in
     Python*, e.g. `ds.py.map(pyfn; num_proc=4)` (a Julia function fails there as well).
 
-See also [`ds.filter`](@ref filter(f, ::Dataset)).
+See also [`filter`](@ref).
 
 # Examples
 
 ```julia
 julia> ds = with_format(Dataset((; label=[5, 0, 4])), "julia");
 
-julia> ds2 = ds.map(x -> Dict("label" => x["label"] .+ 100); batched=true);
+julia> ds2 = map(x -> Dict("label" => x["label"] .+ 100), ds; batched=true);
 
 julia> ds2[1:3]["label"]
 3-element Vector{Int64}:
@@ -390,25 +389,25 @@ function Base.map(f, ds::Dataset; new_fingerprint = nothing, kws...)
 end
 
 """
-    ds.filter(f; kws...)
     filter(f, ds::Dataset; kws...)
 
-Filter `ds` through `datasets.Dataset.filter`, bridging Julia values as
-[`ds.map`](@ref map(f, ::Dataset)) does: each example (or batch, with `batched=true`) is
-converted with [`py2jl`](@ref) before `f` sees it, and `f` returns a `Bool` (or, when
-`batched=true`, a vector of `Bool`s), converted back to Python with [`jl2py`](@ref).
+Filter `ds` through `datasets`' `filter`, bridging Julia values as [`map`](@ref) does: each
+example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it,
+and `f` returns a `Bool` (or, when `batched=true`, a vector of `Bool`s), converted back to
+Python with [`jl2py`](@ref).
 
-Keyword arguments are forwarded to `datasets.Dataset.filter`; the parent's julia
-format/transform is preserved on the returned `Dataset`. The result is cached like that of
-`ds.map`, by a fingerprint of what `f` does.
+Keyword arguments are forwarded to the Python `filter`; the parent's julia format/transform
+is preserved on the returned `Dataset`. The result is cached like [`map`](@ref)'s, by a
+fingerprint of what `f` does.
 
-The two forms are equivalent; use the underlying `ds.py.filter(...)` for a raw Python callback.
+`ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`; use the underlying
+`ds.py.filter(...)` for a raw Python callback.
 
-As with `ds.map`, `num_proc ≥ 1` is rejected with an `ArgumentError`: `datasets`' worker
+As with [`map`](@ref), `num_proc ≥ 1` is rejected with an `ArgumentError`: `datasets`' worker
 processes cannot call back into Julia. Use `ds.py.filter(pyfn; num_proc=N)` with a function
 defined in Python instead.
 
-See also [`ds.map`](@ref map(f, ::Dataset)).
+See also [`map`](@ref).
 """
 function Base.filter(f, ds::Dataset; new_fingerprint = nothing, kws...)
     _check_num_proc(:filter; kws...)
