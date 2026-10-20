@@ -147,12 +147,16 @@ PRs should update [`CHANGELOG.md`](CHANGELOG.md). It follows
 [Semantic Versioning](https://semver.org/).
 
 - Any user-visible change (bug fix; added, changed, deprecated, or removed method or
-  behavior) must add a bullet under the `## [Unreleased]` heading, in the matching
-  category: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
+  behavior) must add a bullet under the topmost heading, the undated `## [X.Y.Z]`, in the
+  matching category: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
   Purely internal changes (refactors, tests, CI, doc typos) don't need an entry.
+- The unreleased section is named after the next patch version (the `version` in
+  `Project.toml` with its patch number + 1), with no date, and its compare link at the
+  bottom of the file points to `HEAD`.
 - Write entries for users, in the present tense, describing the effect rather than the
   code change.
-- On release: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty
-  `## [Unreleased]` above it, bump `version` in `Project.toml` per SemVer (new feature
-  → minor, bug fix → patch; for `0.x`, breaking → minor), and update the compare links
-  at the bottom of the file.
+- On release: date that heading (`## [X.Y.Z] - YYYY-MM-DD`), bump `version` in
+  `Project.toml` to `X.Y.Z`, point its compare link at `vX.Y.Z` instead of `HEAD`, and add
+  a fresh empty `## [X.Y.(Z+1)]` above it, with its link to `HEAD`. If the release needs a
+  minor bump instead (for `0.x`, a breaking change), rename the section to that version
+  first.
