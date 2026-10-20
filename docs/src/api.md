@@ -41,6 +41,7 @@ load_from_disk
 from_csv
 from_json
 from_parquet
+from_generator
 ```
 
 ## Combining

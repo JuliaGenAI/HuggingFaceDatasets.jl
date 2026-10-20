@@ -252,9 +252,9 @@ end
 # Expose the `datasets.Dataset` classmethods under their Python names, so e.g.
 # `Dataset.from_dict(data; ...)` / `Dataset.from_csv(path; ...)` / `Dataset.load_from_disk(path)`
 # mirror `datasets.Dataset.from_dict` / `.from_csv` / `.load_from_disk`. `getproperty` is
-# overloaded on the *type* object itself; the file constructors and `load_from_disk` route to
-# the top-level wrappers in `toplevel.jl` (`from_csv`/`from_json`/`from_parquet` and
-# `_wrap_toplevel`). Every other name falls back to normal `DataType` field access
+# overloaded on the *type* object itself; the file and generator constructors and
+# `load_from_disk` route to the top-level wrappers in `toplevel.jl`
+# (`from_csv`/`from_json`/`from_parquet`/`from_generator` and `_wrap_toplevel`). Every other name falls back to normal `DataType` field access
 # (`Dataset.name`, `Dataset.parameters`, ...), so type introspection is unaffected.
 function Base.getproperty(::Type{Dataset}, s::Symbol)
     if s === :from_dict
@@ -265,6 +265,8 @@ function Base.getproperty(::Type{Dataset}, s::Symbol)
         return from_json
     elseif s === :from_parquet
         return from_parquet
+    elseif s === :from_generator
+        return from_generator
     elseif s === :load_from_disk
         return (path; kws...) -> _wrap_toplevel(datasets.Dataset.load_from_disk(jl2py(path); kws...))
     else

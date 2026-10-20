@@ -33,8 +33,10 @@ that lazily converts observations to Julia types).
   formatter: this is how `datasets`' spawned `num_proc` workers (Windows) get the format
   without Julia. A plain Python process without that `sys.path` entry doesn't know
   `"julia"`, so `save_to_disk` (src/serialization.jl) saves `"julia"` as `"numpy"`. It also
-  defines `JuliaFunction`, the wrapper that pickles a Julia `map`/`filter` callback as its
-  content fingerprint (see `src/fingerprint.jl`).
+  defines `JuliaFunction`, the wrapper that pickles a Julia `map`/`filter` callback, or the
+  generator function of `from_generator`, as its content fingerprint (see `src/fingerprint.jl`),
+  and the `examples`/`batch_rows` generators that pull a Julia iterable's examples (or split
+  its batches of columns into rows) for `from_generator`.
 - `src/dataset.jl` — `Dataset`, the wrapper over `datasets.Dataset`. 1-based
   indexing, format/transform machinery (`with_format`, `set_format!`,
   `with_jltransform`, `set_jltransform!`, `reset_format!`).
@@ -62,8 +64,12 @@ that lazily converts observations to Julia types).
   `streaming=true`, an `IterableDataset`/`IterableDatasetDict`).
 - `src/toplevel.jl` — Julia wrappers for module-level `datasets` functions
   (`concatenate_datasets`, `interleave_datasets`, `load_from_disk`, and
-  `from_csv`/`from_json`/`from_parquet`) that re-wrap results in the default
-  `"julia"` format.
+  `from_csv`/`from_json`/`from_parquet`/`from_generator`) that re-wrap results in the default
+  `"julia"` format. `from_generator` (also `Dataset(::IterableDataset)`) materializes a stream
+  (iterated unformatted, with its `features`/`split`) or a Julia iterable into a cached `Dataset`;
+  the cache is keyed by `_content_hash` of a Julia source, by the user's `fingerprint`, or else
+  by a random one in `datasets`' temporary directory. It rethrows the cause of `datasets`'
+  `DatasetGenerationError`.
 - `src/transforms.jl` — `py2jl` / `numpy2jl` / `jl2numpy` / `jl2py`. `py2jl`
   recursively converts Python containers, numpy arrays (copyless, zero-copy), and
   PIL images into Julia types; `jl2py` is the write-path dual. The `"julia"`
@@ -108,8 +114,10 @@ that lazily converts observations to Julia types).
 Managed by [CondaPkg.jl](https://github.com/JuliaPy/CondaPkg.jl) via
 `CondaPkg.toml` (conda-forge channel): `datasets`, `numpy`, `pillow`.
 
-- `datasets` is pinned to `>=4.0, <6`. Do **not** lower the floor below 4.0
-  (the lazy `Column` column-access path depends on datasets ≥ 4).
+- `datasets` is pinned to `>=5.1, <6`. Do **not** lower the floor below 5.1
+  (the lazy `Column` column-access path depends on datasets ≥ 4, and a batched
+  `IterableDataset.map` under the `"julia"` format relies on 5.1 stacking the numpy scalars of
+  re-batched rows into a typed array instead of an `object` one).
 - `python-gil` keeps the env on a GIL-enabled CPython, excluding conda-forge's
   free-threaded (no-GIL) builds (e.g. `cp314t`): PythonCall's free-threading support
   is experimental, and `datasets`' C extensions re-enable the GIL there anyway.
