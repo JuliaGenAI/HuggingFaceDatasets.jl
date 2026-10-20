@@ -212,7 +212,10 @@ The result is returned in the default `"julia"` format.
     An `IterableDataset`, or a source with something that can't be hashed, has no fingerprint:
     its dataset is rebuilt on every call, in a temporary directory deleted at the end of the
     session (or in `cache_dir`, if given). Pass `fingerprint`, a string naming the examples, to
-    cache them under it instead, and change it when the examples change.
+    cache them under it instead, and change it when the examples change. As in Python, the cache
+    is then named by `fingerprint` alone, so `datasets.Dataset.from_generator` with the same
+    `fingerprint` and `cache_dir` shares it, as long as it has the same `split` (Python's default
+    is `"train"`, while a stream's carries over): a call with another `split` throws.
 
 !!! warning "No multiprocessing (`num_proc`)"
     The examples of a Julia source or of an `IterableDataset` are generated in this process, so
@@ -283,9 +286,10 @@ end
 
 Dataset(stream::IterableDataset; kws...) = from_generator(stream; kws...)
 
-# `datasets` names the cache of `from_generator` by hashing the generator function, which pickles
-# as `fingerprint` in a `JuliaFunction`, along with `features` and `split`. (Its own `fingerprint`
-# keyword would name the cache by the fingerprint alone.)
+# A given `fingerprint` goes to `datasets`' own keyword, which names the cache by it alone, so that
+# Python's `from_generator` with the same `fingerprint` and `cache_dir` shares the cache. Otherwise
+# `datasets` names it by hashing the generator function, which pickles as our content hash in a
+# `JuliaFunction`, along with `features` and `split`.
 function _from_generator(generator::Py, source, hashed_kws; fingerprint = nothing,
                          cache_dir = nothing, num_proc = nothing, kws...)
     if num_proc isa Integer && num_proc > 1
@@ -296,7 +300,8 @@ function _from_generator(generator::Py, source, hashed_kws; fingerprint = nothin
             "Julia function, have it work on batches with several threads, e.g. with " *
             "`Threads.@threads`."))
     end
-    fp = fingerprint === nothing ? _content_hash(source, hashed_kws) : fingerprint
+    fingerprint === nothing || return _generate(generator; fingerprint, cache_dir, kws...)
+    fp = _content_hash(source, hashed_kws)
     if !(fp isa AbstractString)
         @info "`from_generator` can't fingerprint its source ($(fp.msg)), so the dataset is \
                rebuilt on every call, in a temporary directory unless `cache_dir` is given. Pass \

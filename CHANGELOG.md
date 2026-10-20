@@ -5,7 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.4]
+## [0.4.5]
+
+### Changed
+- A `fingerprint` given to `Dataset.from_generator` or `Dataset(stream)` names the cache alone,
+  as in Python, instead of being hashed with `features` and `split`. Julia and Python code calling
+  `from_generator` with the same `fingerprint`, `cache_dir` and `split` share one cache instead of
+  building identical copies. A dataset cached under a `fingerprint` by 0.4.4 is built again once.
+
+## [0.4.4] - 2026-10-20
 
 ### Changed
 - The Python dependencies require `datasets` 5.1 (`>=5.1, <6`, previously `>=4.0`); an existing
@@ -365,7 +373,8 @@ Baseline. Changes up to and including this release are recorded in the
 [git history](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/commits/main) and the
 [GitHub releases](https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/releases).
 
-[0.4.4]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.3...HEAD
+[0.4.5]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/JuliaGenAI/HuggingFaceDatasets.jl/compare/v0.4.0...v0.4.1

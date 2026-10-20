@@ -237,6 +237,11 @@ end
             f = Dataset.from_generator(rows; fingerprint = "rows-v1", cache_dir = dir)
             @test Dataset.from_generator(() -> error("not iterated"); fingerprint = "rows-v1",
                                          cache_dir = dir)[:] == f[:]
+            # as does one built by Python's `from_generator` under that fingerprint
+            datasets.Dataset.from_generator(pyeval("lambda: iter([{'x': 7}])", @__MODULE__);
+                                            fingerprint = "py-v1", cache_dir = dir)
+            @test Dataset.from_generator(() -> error("not iterated"); fingerprint = "py-v1",
+                                         cache_dir = dir)[:] == Dict("x" => [7])
 
             # a function returning batches of columns, whose arrays' last axis indexes the rows
             b = Dataset.from_generator(; batched = true, cache_dir = dir) do
