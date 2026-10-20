@@ -7,8 +7,8 @@ returns for a single split.
 
 Unlike [`Dataset`](@ref), an `IterableDataset` has **no random access and no length**: it is
 consumed by iteration (`for obs in itds`, `collect(itds)`, `Iterators.take(itds, n)`), not by
-indexing. Its transforms (`map`/`filter`/`shuffle(buffer_size=…)`/`take`/`skip`) are lazy and
-return new `IterableDataset`s.
+indexing. Its transforms (`itds.map`/`itds.filter`/`itds.shuffle(buffer_size=…)`/`itds.take`/
+`itds.skip`) are lazy and return new `IterableDataset`s.
 
 Provides:
 - `Base.iterate` over the underlying python iterator, applying the julia transform (`py2jl`
@@ -136,16 +136,17 @@ Base.lastindex(::IterableDataset) = _no_index("lastindex")
 Base.show(io::IO, ds::IterableDataset) = print(io, getfield(ds, :py))
 
 """
+    ds.map(f; kws...)
     map(f, ds::IterableDataset; kws...)
 
-Lazily apply `f` to every example of the stream through `datasets`' `IterableDataset.map`,
-bridging Julia values on both sides exactly like the [`Dataset`](@ref) version: each example
-(or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f`'s
-return value is converted back to Python with [`jl2py`](@ref). Nothing is materialized — the
-returned `IterableDataset` applies `f` on the fly as it is iterated.
+Lazily apply `f` to every example of the stream through `datasets.IterableDataset.map`,
+bridging Julia values on both sides exactly like [`ds.map`](@ref map(f, ::Dataset)) on a
+`Dataset`: each example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before
+`f` sees it, and `f`'s return value is converted back to Python with [`jl2py`](@ref). Nothing is
+materialized — the returned `IterableDataset` applies `f` on the fly as it is iterated.
 
-`ds.map(f; ...)` is equivalent to this `map(f, ds; ...)`; use `ds.py.map(...)` for a raw Python
-callback. See also [`filter`](@ref).
+The two forms are equivalent; use `ds.py.map(...)` for a raw Python callback. See also
+[`ds.filter`](@ref filter(f, ::IterableDataset)).
 """
 function Base.map(f, ds::IterableDataset; kws...)
     y = getfield(ds, :py).map(_pycallback(f); kws...)
@@ -153,11 +154,12 @@ function Base.map(f, ds::IterableDataset; kws...)
 end
 
 """
+    ds.filter(f; kws...)
     filter(f, ds::IterableDataset; kws...)
 
-Lazily filter the stream by the Julia predicate `f` through `datasets`'
-`IterableDataset.filter`, bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) as [`map`](@ref)
-does. `ds.filter(f; ...)` is equivalent to this `filter(f, ds; ...)`.
+Lazily filter the stream by the Julia predicate `f` through `datasets.IterableDataset.filter`,
+bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) as
+[`ds.map`](@ref map(f, ::IterableDataset)) does. The two forms are equivalent.
 """
 function Base.filter(f, ds::IterableDataset; kws...)
     y = getfield(ds, :py).filter(_pycallback(f); kws...)

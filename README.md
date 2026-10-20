@@ -8,7 +8,7 @@ HuggingFaceDatasets.jl is a non-official julia wrapper around the python package
 
 It wraps the python `datasets.Dataset` and `datasets.DatasetDict` types and:
 
-- forwards every method of the underlying python object, so the full `datasets` API (`map`, `filter`, `shuffle`, `train_test_split`, `cast_column`, …) is available;
+- forwards every method of the underlying python object, so the full `datasets` API (`ds.map`, `ds.filter`, `ds.shuffle`, `ds.train_test_split`, `ds.cast_column`, …) is available;
 - uses 1-based indexing, julia iteration, and other julia conventions;
 - returns observations in a lazy `"julia"` format by default, converting them to native julia types (numeric N-D arrays, dictionaries, …) on access, copylessly when possible, and stacking array columns into `(dims…, N)` tensors.
 

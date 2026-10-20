@@ -184,7 +184,7 @@ The examples are written to an Arrow file in the cache, which the returned datas
 memory-maps. `source` can be
 
 - an [`IterableDataset`](@ref), e.g. a stream from `load_dataset(...; streaming=true)` with
-  `map`/`filter` steps, iterated in this process. This keeps only the result of a streamed
+  `stream.map`/`stream.filter` steps, iterated in this process. This keeps only the result of a streamed
   pipeline, e.g. the token ids and not the text. The stream's `features` and `split` carry over.
   `Dataset(stream; kws...)` is the same.
 - a Julia iterable of examples (`AbstractDict`s or `NamedTuple`s mapping column names to
@@ -204,9 +204,9 @@ The result is returned in the default `"julia"` format.
     The dataset is cached under a fingerprint of `source`. A later call with the same
     fingerprint, `features` and `split`, also in a later session, loads it from the cache
     without iterating `source`. For a Julia source the fingerprint hashes what the source is and
-    does, as for the function of [`map`](@ref): its values (the examples of a `Vector`, ...), the
-    code of its functions and of the functions they use from your own modules, the values they
-    capture and the globals they read, and `batched`. Files or other inputs from outside Julia,
+    does, as for the function of [`ds.map`](@ref map(f, ::Dataset)): its values (the examples of
+    a `Vector`, ...), the code of its functions and of the functions they use from your own
+    modules, the values they capture and the globals they read, and `batched`. Files or other inputs from outside Julia,
     e.g. the lines of a file the source reads, are not tracked.
 
     An `IterableDataset`, or a source with something that can't be hashed, has no fingerprint:
@@ -216,8 +216,9 @@ The result is returned in the default `"julia"` format.
 
 !!! warning "No multiprocessing (`num_proc`)"
     The examples of a Julia source or of an `IterableDataset` are generated in this process, so
-    `num_proc > 1` throws an `ArgumentError`. To parallelize a stream's Julia `map`, use
-    `batched=true` and parallelize over each batch in the function, e.g. with `Threads.@threads`.
+    `num_proc > 1` throws an `ArgumentError`. To parallelize the Julia function of a
+    `stream.map`, use `batched=true` and parallelize over each batch in the function, e.g. with
+    `Threads.@threads`.
 
 See also [`load_dataset`](@ref) and [`IterableDataset`](@ref).
 
@@ -251,7 +252,7 @@ Tokenize a streamed corpus into blocks of 513 token ids, and keep only those in 
 ```julia
 julia> stream = load_dataset("roneneldan/TinyStories"; split = "validation", streaming = true);
 
-julia> blocks = map(stream; batched = true, remove_columns = ["text"]) do b
+julia> blocks = stream.map(; batched = true, remove_columns = ["text"]) do b
            ids = tokenize(b["text"])                             # a Vector{UInt16}
            Dict("ids" => reshape(ids[1:end ÷ 513 * 513], 513, :))
        end;

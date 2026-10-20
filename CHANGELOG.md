@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Dataset(stream)` does the same for a stream (#109). This materializes a streamed pipeline,
   e.g. the token ids of a corpus streamed from the Hub, without keeping the raw data. With
   `batched = true` a Julia iterable yields batches of columns, which convert faster. A Julia
-  source is cached under a fingerprint of its content, as for `map`; a stream is rebuilt on every
+  source is cached under a fingerprint of its content, as for `ds.map`; a stream is rebuilt on every
   call, in a temporary directory, unless given a `fingerprint`. An error raised while generating
   the examples is thrown as it is, instead of `datasets`' uninformative `DatasetGenerationError`.
 - `py2jl` converts PythonCall's `PyDict`, `PyList`, `PySet` and `PyArray` like the Python object

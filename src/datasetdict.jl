@@ -226,28 +226,28 @@ function Base.merge(d::DatasetDict, others::AbstractDict...)
 end
 
 """
+    d.map(f; kws...)
     map(f, d::DatasetDict; kws...)
 
 Apply `f` to every example of every split of `d`, bridging Julia values on both sides just
-like the [`Dataset`](@ref) version (which this calls on each split): each example (or batch,
-with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it, and `f`'s return
-value is converted back with [`jl2py`](@ref). Keyword arguments are those of `datasets`'
-`DatasetDict.map`, and each split keeps its own julia format/transform. With
+like [`ds.map`](@ref map(f, ::Dataset)) on a `Dataset` (which this calls on each split): each
+example (or batch, with `batched=true`) is converted with [`py2jl`](@ref) before `f` sees it,
+and `f`'s return value is converted back with [`jl2py`](@ref). Keyword arguments are those of
+`datasets.DatasetDict.map`, and each split keeps its own julia format/transform. With
 `with_split=true`, `f` gets the split name as its last positional argument.
 
-Results are cached like the `Dataset` version's, by a fingerprint of what `f` does. To set the
+Results are cached like those of `ds.map` on a `Dataset`, by a fingerprint of what `f` does. To set the
 fingerprints yourself, pass `new_fingerprint` as a `Dict` mapping each split name to its
 fingerprint, like `cache_file_names` (splits stored in the same directory would otherwise
 share a cache file).
 
-`d.map(f; ...)` is equivalent to this `map(f, d; ...)`; use `d.py.map(...)` for a raw Python
-callback.
+The two forms are equivalent; use `d.py.map(...)` for a raw Python callback.
 
 As for a `Dataset`, `num_proc ≥ 1` is rejected with an `ArgumentError`, since `datasets`'
 worker processes cannot call back into Julia; use `d.py.map(pyfn; num_proc=N)` with a
 function defined in Python instead.
 
-See also [`filter`](@ref).
+See also [`d.filter`](@ref filter(f, ::DatasetDict)).
 """
 function Base.map(f, d::DatasetDict; with_split::Bool = false, kws...)
     _check_num_proc(:map; kws...)
@@ -258,17 +258,18 @@ function Base.map(f, d::DatasetDict; with_split::Bool = false, kws...)
 end
 
 """
+    d.filter(f; kws...)
     filter(f, d::DatasetDict; kws...)
 
-Filter every split of `d` by the Julia predicate `f`, applied per example (Python's
-`DatasetDict.filter`), bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) exactly as
-[`map`](@ref) does. Returns a `DatasetDict` with the same splits, each keeping its own julia
-format/transform. `d.filter(f; ...)` is equivalent to this `filter(f, d; ...)`. Like
-[`map`](@ref), it rejects `num_proc ≥ 1` with an `ArgumentError`, and caches its results (a
-`new_fingerprint` is a per-split `Dict`).
+Filter every split of `d` by the Julia predicate `f`, applied per example
+(`datasets.DatasetDict.filter`), bridging values with [`py2jl`](@ref)/[`jl2py`](@ref) exactly as
+[`d.map`](@ref map(f, ::DatasetDict)) does. Returns a `DatasetDict` with the same splits, each
+keeping its own julia format/transform. The two forms are equivalent. Like `d.map`, it rejects
+`num_proc ≥ 1` with an `ArgumentError`, and caches its results (a `new_fingerprint` is a
+per-split `Dict`).
 
 !!! note
-    This deliberately overrides the generic `AbstractDict` `filter` (which would filter split
+    This deliberately overrides `Base.filter` on an `AbstractDict` (which would filter split
     *entries*): `filter(f, ::DatasetDict)` filters *examples* within every split, to match
     Python and the property-style `d.filter(f)`. To select splits, index the `DatasetDict` or
     build a new one explicitly.
