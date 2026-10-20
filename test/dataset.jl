@@ -215,6 +215,56 @@ end
         end
     end
 
+    @testset "from_generator (#109)" begin
+        mktempdir() do dir
+            rows = [(; x = i, y = Float32(i) / 2, s = "r$i") for i in 1:3]
+            ds = Dataset.from_generator(rows; cache_dir = dir)
+            @test ds isa Dataset
+            @test ds.format["type"] == "julia"
+            @test ds[:] == Dict("x" => [1, 2, 3], "y" => Float32[0.5, 1, 1.5], "s" => ["r1", "r2", "r3"])
+            @test ds[:]["y"] isa Vector{Float32}
+
+            # cached under a fingerprint of the examples
+            @test HuggingFaceDatasets.from_generator(copy(rows); cache_dir = dir).cache_files ==
+                  ds.cache_files
+            rows[3] = (; x = 3, y = 2.0f0, s = "r3")
+            ds2 = Dataset.from_generator(rows; cache_dir = dir)
+            @test ds2[3]["y"] == 2
+            @test ds2.cache_files != ds.cache_files
+            @test Dataset.from_generator(rows; features = ds.features, cache_dir = dir)[3]["y"] == 2
+
+            # a given fingerprint loads the cached dataset without iterating the source
+            f = Dataset.from_generator(rows; fingerprint = "rows-v1", cache_dir = dir)
+            @test Dataset.from_generator(() -> error("not iterated"); fingerprint = "rows-v1",
+                                         cache_dir = dir)[:] == f[:]
+
+            # a function returning batches of columns, whose arrays' last axis indexes the rows
+            b = Dataset.from_generator(; batched = true, cache_dir = dir) do
+                (Dict("ids" => reshape(UInt16.(1:8) .+ UInt16(8k), 2, 4), "n" => (1:4) .+ 4k)
+                 for k in 0:1)
+            end
+            @test length(b) == 8
+            @test b[1:8]["ids"] == reshape(1:16, 2, 8)
+            @test b[1:8]["ids"] isa Matrix{UInt16}
+            @test b[:]["n"] == 1:8
+
+            pygen = pyeval("lambda n: ({'a': i} for i in range(n))", @__MODULE__)
+            @test Dataset.from_generator(pygen; gen_kwargs = pydict(n = 3), cache_dir = dir)[:]["a"] ==
+                  [0, 1, 2]
+
+            # an error of the generator is thrown instead of `datasets`' `DatasetGenerationError`
+            @test_throws ArgumentError Dataset.from_generator(rows; num_proc = 2)
+            err = try Dataset.from_generator([1, 2]; cache_dir = dir) catch e; e end
+            @test err isa PyException && occursin("an example must be", sprint(showerror, err))
+            err = try
+                Dataset.from_generator([Dict("a" => [1, 2], "b" => [1])]; batched = true, cache_dir = dir)
+            catch e
+                e
+            end
+            @test err isa PyException && occursin("different lengths", sprint(showerror, err))
+        end
+    end
+
     @testset "type introspection unaffected by type-level getproperty" begin
         @test fieldnames(Dataset) == (:py, :jltransform)
         @test fieldnames(DatasetDict) == (:py, :jltransform, :splits)

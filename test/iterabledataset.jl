@@ -111,12 +111,6 @@ end
     @test first(itds)["x"] isa UInt16                   # rows keep the column's type too
 
     @test [r["x"] for r in itds.filter((x, i) -> iseven(i); with_indices=true)] == [1, 3]
-
-    # the `"julia"` formatter stacks a list of numpy scalars by dtype
-    fmt = datasets.formatting.get_formatter("julia")
-    a = fmt._consolidate(pylist([np.uint16(1), np.uint16(2)]))
-    @test pyconvert(String, a.dtype.name) == "uint16"
-    @test pyconvert(String, fmt._consolidate(pylist([np.uint16(1), np.int8(2)])).dtype.name) == "object"
 end
 
 @testset "julia format keeps each column's dtype" begin
@@ -176,4 +170,38 @@ end
     # custom jltransform via with_jltransform
     tr = with_jltransform(itds, row -> py2jl(row)["x"] + 1)
     @test collect(tr) == [2, 3, 4]
+end
+
+@testset "materialize with from_generator (#109)" begin
+    mktempdir() do dir
+        src = Dataset((; label = [0, 1, 0], x = Float32[1, 2, 3], text = ["a", "bb", "c"]))
+        src = set_format!(Dataset(src.py.cast_column("label", datasets.ClassLabel(names = pylist(["neg", "pos"])))),
+                          "julia")
+        stream = src.to_iterable_dataset()
+        ds = @test_logs (:info, r"can't fingerprint its source") Dataset(stream)
+        @test ds isa Dataset
+        @test ds.format["type"] == "julia"
+        @test ds[:] == src[:]
+        @test ds.features["label"] isa ClassLabel
+        # rebuilt on every call, in a temporary directory
+        @test Dataset(stream).cache_files != ds.cache_files
+        tmp = pyconvert(String, datasets.fingerprint.get_temporary_cache_files_directory())
+        @test startswith(ds.cache_files[1]["filename"], tmp)
+        @test Dataset.from_generator(stream.py; cache_dir = dir)[:] == src[:]   # a Python stream
+
+        blocks = map(stream; batched = true, remove_columns = ["text"]) do b
+            Dict("ids" => reshape(UInt16.(1:2length(b["x"])), 2, :))
+        end
+        ds = Dataset.from_generator(blocks; fingerprint = "blocks-v1", cache_dir = dir, split = "validation")
+        @test ds[1:3]["ids"] == [1 3 5; 2 4 6]
+        @test ds[1:3]["ids"] isa Matrix{UInt16}
+        @test string(ds.py.split) == "validation"
+        @test Dataset(blocks; fingerprint = "blocks-v1", cache_dir = dir, split = "validation").cache_files ==
+              ds.cache_files
+        @test_throws ArgumentError Dataset(blocks; num_proc = 2)
+
+        gen = pyeval("lambda: iter([{'x': 1}, {'x': 2}])", @__MODULE__)
+        named = IterableDataset(datasets.IterableDataset.from_generator(gen; split = "test"))
+        @test string(Dataset(named; cache_dir = dir).py.split) == "test"   # the stream's split
+    end
 end

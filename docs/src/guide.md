@@ -92,6 +92,45 @@ Indexing with a single integer returns one observation; indexing with a range or
 returns a batch, represented as a dictionary mapping each column name to a vector of
 values (see below).
 
+### Materializing a stream or a Julia generator
+
+With `streaming=true`, `load_dataset` returns an [`IterableDataset`](@ref), whose `map` and
+`filter` are lazy: they run again on every pass and are never written to disk.
+[`from_generator`](@ref) (`Dataset.from_generator`, or `Dataset(stream)` for a stream) writes the
+examples of a stream, or of a Julia iterable, to an Arrow file in the cache and returns the
+memory-mapped [`Dataset`](@ref). This keeps only the result of a pipeline: tokenizing a corpus
+streamed from the Hub stores the token ids, without the parquet files and the Arrow copy of the
+text that a non-streaming `load_dataset` followed by `map` keeps.
+
+```julia-repl
+julia> stream = load_dataset("roneneldan/TinyStories"; split = "validation", streaming = true);
+
+julia> blocks = map(stream; batched = true, remove_columns = ["text"]) do b
+           ids = tokenize(b["text"])                                # a Vector{UInt16}
+           Dict("ids" => reshape(ids[1:end ÷ 513 * 513], 513, :))   # blocks of 513 ids
+       end;
+
+julia> ds = Dataset(blocks; fingerprint = "tinystories-validation-gpt2-513");
+
+julia> ds[1:32]["ids"];   # a 513×32 Matrix{UInt16}
+```
+
+A stream can't be fingerprinted, so without `fingerprint` it is rebuilt on every call, in a
+temporary directory. With one, a later call, also in a new session, loads the cached dataset
+without streaming. A Julia iterable of examples (`Dict`s or `NamedTuple`s), or a function
+returning one, is cached under a fingerprint of its content, as the function of `map` is. With
+`batched = true` it yields batches of columns, which convert faster:
+
+```julia-repl
+julia> ds = Dataset.from_generator((; x = i, y = Float32(i) / 2) for i in 1:3);
+
+julia> ds[:]["y"]
+3-element Vector{Float32}:
+ 0.5
+ 1.0
+ 1.5
+```
+
 ## Method forwarding
 
 Any method or property of the wrapped Python object is available directly on the Julia

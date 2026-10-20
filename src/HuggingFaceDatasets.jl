@@ -74,7 +74,7 @@ include("serialization.jl")
 include("fingerprint.jl")
 
 # `public` is a Julia 1.11+ keyword; `@compat` makes it a no-op on the supported 1.10.
-@compat public from_csv, from_json, from_parquet
+@compat public from_csv, from_json, from_parquet, from_generator
 
 # Julia < 1.12 bundles libssh2 1.11.0 and loads it before Python starts (at startup on 1.10, with
 # `Pkg` on 1.11). On Windows, the conda-forge `libcurl.dll` that `pyarrow` links then binds to that

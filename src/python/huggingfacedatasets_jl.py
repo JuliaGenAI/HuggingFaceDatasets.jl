@@ -72,17 +72,6 @@ class JuliaFormatter(NumpyFormatter):
         np_array_kwargs.setdefault("dtype", None)
         super().__init__(features=features, token_per_repo_id=token_per_repo_id, **np_array_kwargs)
 
-    def _consolidate(self, column):
-        # A batched `IterableDataset.map` re-batches rows this formatter already split into numpy
-        # scalars. Before 5.1, `datasets` consolidates those into an `object` array; stack them.
-        if (
-            isinstance(column, list)
-            and column
-            and all(isinstance(x, (np.number, np.bool_)) and x.dtype == column[0].dtype for x in column)
-        ):
-            return np.stack(column)
-        return super()._consolidate(column)
-
     def _extractors(self, pa_table, batch):
         # The columns read straight from Arrow, with their extractor: top-level
         # `Value("string")` columns, and in a batch, list columns of numbers. Neither needs
@@ -143,11 +132,13 @@ _register_formatter(JuliaFormatter, JuliaFormatType("julia"))
 
 
 class JuliaFunction:
-    """A Julia function given to `Dataset.map`/`filter`, with a fingerprint of its code and data.
+    """A Julia function given to `Dataset.map`/`filter`, with a fingerprint of its code and data,
+    or the generator function given to `Dataset.from_generator`, with a fingerprint of its source.
 
-    `datasets` fingerprints a transform by pickling it, and a Julia function would pickle by
-    name. This wrapper pickles as its `fingerprint`, computed by HuggingFaceDatasets.jl, so the
-    cache follows what the function does. It does not unpickle into a working function.
+    `datasets` fingerprints a transform, or a generator, by pickling it, and a Julia function
+    would pickle by name. This wrapper pickles as its `fingerprint`, computed by
+    HuggingFaceDatasets.jl, so the cache follows what the function does. It does not unpickle
+    into a working function.
     """
 
     __slots__ = ("function", "fingerprint")
@@ -172,7 +163,29 @@ class JuliaFunction:
 def _unpickled_julia_function(fingerprint):
     def function(*args, **kwargs):
         raise RuntimeError(
-            "A Julia function can only be called in the Julia session that passed it to `map`/`filter`."
+            "A Julia function can only be called in the Julia session that passed it to "
+            "`map`/`filter`/`from_generator`."
         )
 
     return function
+
+
+END = object()  # what the `next_item` functions from Julia return past the last item
+
+
+def examples(next_item):
+    """The examples of a Julia iterable, for `Dataset.from_generator`: what `next_item()`
+    returns until it returns `END`."""
+    while (example := next_item()) is not END:
+        yield example
+
+
+def batch_rows(next_item):
+    """The rows of the batches of a Julia iterable, for `Dataset.from_generator`: of each
+    mapping of column names to columns that `next_item()` returns until it returns `END`."""
+    while (batch := next_item()) is not END:
+        lengths = {name: len(column) for name, column in batch.items()}
+        if len(set(lengths.values())) > 1:
+            raise ValueError(f"The columns of a batch have different lengths: {lengths}")
+        for i in range(next(iter(lengths.values()), 0)):
+            yield {name: column[i] for name, column in batch.items()}
