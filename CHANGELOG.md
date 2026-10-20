@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.5]
 
-### Changed
-- A `fingerprint` given to `Dataset.from_generator` or `Dataset(stream)` names the cache alone,
-  as in Python, instead of being hashed with `features` and `split`. Julia and Python code calling
-  `from_generator` with the same `fingerprint`, `cache_dir` and `split` share one cache instead of
-  building identical copies. A dataset cached under a `fingerprint` by 0.4.4 is built again once.
-
 ## [0.4.4] - 2026-10-20
 
 ### Changed
@@ -43,7 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   e.g. the token ids of a corpus streamed from the Hub, without keeping the raw data. With
   `batched = true` a Julia iterable yields batches of columns, which convert faster. A Julia
   source is cached under a fingerprint of its content, as for `map`; a stream is rebuilt on every
-  call, in a temporary directory, unless given a `fingerprint`. An error raised while generating
+  call, in a temporary directory, unless given a `fingerprint`. A given `fingerprint` names the
+  cache alone, as in Python, so Julia and Python code calling `from_generator` with the same
+  `fingerprint`, `cache_dir` and `split` share one cache (#112). An error raised while generating
   the examples is thrown as it is, instead of `datasets`' uninformative `DatasetGenerationError`.
 - `py2jl` converts PythonCall's `PyDict`, `PyList`, `PySet` and `PyArray` like the Python object
   they wrap, instead of returning them unchanged.
